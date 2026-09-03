@@ -20,166 +20,131 @@
     html, body { height:100%; }
     body {
       margin:0; font-family:ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
-      background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased;
+      background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; overflow:hidden;
     }
-    /* decorative music blobs */
-    .blob { position:fixed; border-radius:50%; filter:blur(70px); opacity:.35; pointer-events:none; z-index:0; }
+    .blob { position:fixed; border-radius:50%; filter:blur(70px); opacity:.32; pointer-events:none; z-index:0; }
     .blob.b1 { width:420px; height:420px; background:var(--mint-soft); top:-140px; left:-120px; }
-    .blob.b2 { width:380px; height:380px; background:var(--violet-soft); bottom:-140px; right:8%; }
-    .blob.b3 { width:260px; height:260px; background:var(--coral-soft); top:30%; right:-100px; }
+    .blob.b2 { width:380px; height:380px; background:var(--violet-soft); bottom:-160px; right:5%; }
+    .blob.b3 { width:260px; height:260px; background:var(--coral-soft); top:26%; right:-110px; }
 
-    .shell { position:relative; z-index:1; max-width:1280px; margin:0 auto; padding:14px 22px 18px; height:100vh; display:flex; flex-direction:column; }
+    .shell { position:relative; z-index:1; max-width:1560px; margin:0 auto; padding:12px 26px 16px; height:100vh; display:flex; flex-direction:column; }
 
-    /* ---------- header ---------- */
-    header { display:flex; align-items:center; gap:14px; padding:6px 4px 14px; }
-    .logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:1.15rem; letter-spacing:-.02em; }
-    .logo svg { display:block; }
-    .pill { display:inline-flex; align-items:center; gap:.4rem; font-size:.74rem; font-weight:600; padding:.32rem .7rem; border-radius:99px; background:var(--card-soft); color:var(--muted); }
+    /* ---------- top bar ---------- */
+    header { display:flex; align-items:center; gap:14px; padding:4px 4px 12px; flex:none; }
+    .logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:1.1rem; letter-spacing:-.02em; }
+    .pill { display:inline-flex; align-items:center; gap:.4rem; font-size:.73rem; font-weight:600; padding:.3rem .68rem; border-radius:99px; background:var(--card-soft); color:var(--muted); }
     .pill .dot { width:7px; height:7px; border-radius:50%; background:var(--muted); }
     .pill.on { background:var(--mint-soft); color:#0b7d5c; } .pill.on .dot { background:var(--mint); }
     .spacer { flex:1; }
-    .corner-btn {
-      font:inherit; font-size:.76rem; font-weight:600; color:var(--muted); background:transparent;
-      border:none; padding:.42rem .7rem; border-radius:99px; cursor:pointer;
-    }
+    .corner-btn { font:inherit; font-size:.75rem; font-weight:600; color:var(--muted); background:transparent; border:none; padding:.4rem .68rem; border-radius:99px; cursor:pointer; }
     .corner-btn:hover { background:var(--card); color:var(--ink); box-shadow:var(--shadow); }
+    .corner-btn .cdn { color:var(--mint); }
 
-    /* ---------- grid ---------- */
-    .app {
-      flex:1; min-height:0; display:grid; gap:14px;
-      grid-template-columns: 1.05fr 1.25fr 0.85fr;
-      grid-template-rows: minmax(0,auto) minmax(0,auto) minmax(0,1fr);
-      grid-template-areas:
-        "learn       result   activity"
-        "understand  result   activity"
-        "practice    practice practice";
-    }
+    /* ---------- main grid ---------- */
+    .app { flex:1; min-height:0; display:grid; gap:16px; grid-template-columns: minmax(300px, 32%) 1fr; }
     @media (max-width: 980px) {
-      body { height:auto; }
+      body { overflow:auto; }
       .shell { height:auto; }
-      .app { grid-template-columns:1fr; grid-template-areas:"learn" "result" "activity" "understand" "practice"; }
+      .app { grid-template-columns:1fr; }
     }
-    .area-learn { grid-area:learn; display:flex; flex-direction:column; gap:14px; min-height:0; }
-    .area-understand { grid-area:understand; display:flex; flex-direction:column; gap:14px; min-height:0; }
-    .area-result { grid-area:result; display:flex; flex-direction:column; gap:14px; min-height:0; }
-    .area-activity { grid-area:activity; display:flex; flex-direction:column; min-height:0; }
-    .area-practice { grid-area:practice; display:flex; flex-direction:column; gap:14px; min-height:0; }
+    .col-left { display:flex; flex-direction:column; gap:14px; min-height:0; overflow:auto; padding-right:2px; }
+    .col-right { display:flex; flex-direction:column; min-height:0; }
 
-    /* ---------- cards ---------- */
-    .card {
-      background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
-      padding:18px 20px; min-height:0;
-    }
-    .card .eyebrow { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.09em; color:var(--muted); margin-bottom:.55rem; display:flex; align-items:center; gap:.45rem; }
-    .eyebrow .tagdot { width:8px; height:8px; border-radius:3px; }
+    .card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 18px; min-height:0; }
+    .eyebrow { font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.09em; color:var(--muted); margin-bottom:.5rem; display:flex; align-items:center; gap:.45rem; }
+    .eyebrow .tagdot { width:8px; height:8px; border-radius:3px; flex:none; }
     .hidden { display:none !important; }
     .muted { color:var(--muted); font-weight:400; }
-    .status { color:var(--muted); font-size:.82rem; min-height:1.1rem; margin-top:.5rem; }
-
-    /* ---------- now learning ---------- */
-    .learn-title { font-size:1.45rem; font-weight:800; letter-spacing:-.02em; margin:.1rem 0 .15rem; }
-    .learn-sub { font-size:.86rem; color:var(--muted); line-height:1.45; }
-    .learn-row { display:flex; align-items:center; gap:12px; margin-top:12px; }
-    .learn-meta { min-width:0; }
-    #songTitle { font-size:1.05rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .cassette { flex:none; }
-    .mini-input { display:flex; gap:8px; margin-top:14px; }
-    .mini-input input {
-      flex:1; font:inherit; font-size:.9rem; padding:.6rem .85rem; border-radius:12px;
-      border:1.5px solid var(--line); background:var(--card-soft); color:var(--ink); outline:none;
-    }
-    .mini-input input:focus { border-color:var(--mint); background:#fff; }
-    .mini-go {
-      font:inherit; font-size:.85rem; font-weight:700; color:#fff; background:var(--ink);
-      border:none; border-radius:12px; padding:.6rem 1rem; cursor:pointer; white-space:nowrap;
-    }
-    .mini-go:hover { background:#000; }
-
-    /* ---------- activity ---------- */
-    #agentFeed { overflow:auto; min-height:0; flex:1; padding-right:2px; }
-    #agentFeed .feed-item {
-      display:flex; gap:8px; align-items:flex-start; font-size:.8rem; line-height:1.4;
-      color:#4d4a43; padding:.42rem 0; border-bottom:1px dashed var(--line);
-    }
-    #agentFeed .feed-item::before { content:""; flex:none; width:7px; height:7px; border-radius:50%; background:var(--mint); margin-top:.3rem; }
-    #agentFeed .feed-item.warn::before { background:var(--amber); }
-    #agentFeed .feed-item:last-child { border-bottom:none; }
-
-    /* ---------- understanding ---------- */
-    .facts { display:flex; gap:1.1rem; flex-wrap:wrap; margin:.2rem 0 .4rem; }
-    .facts div { text-align:left; }
-    .facts span { font-size:1.25rem; font-weight:800; letter-spacing:-.02em; }
-    .facts label { display:block; margin:0; font-size:.66rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
-    .chords { font-size:1.15rem; font-weight:800; letter-spacing:.06em; color:var(--mint); margin:.35rem 0; }
-    .song-chord { }
-    .res-row { margin:.4rem 0; }
-    .res-row .res-head { display:flex; justify-content:space-between; font-size:.72rem; color:var(--muted); }
-    .res-row .res-head strong { color:var(--ink); font-size:.78rem; }
-    .res-row .bar { margin-top:.22rem; }
-    .res-value { font-size:.9rem; font-weight:700; }
-    .bar { height:7px; background:var(--line); border-radius:5px; overflow:hidden; }
-    .bar > span { display:block; height:100%; background:var(--mint); border-radius:5px; }
-    .src-chip { display:inline-block; font-size:.68rem; font-weight:600; padding:.18rem .55rem; margin:.14rem .28rem .14rem 0; border-radius:99px; background:var(--sky-soft); color:#1f6bb5; text-decoration:none; }
-    .conflict-box { background:var(--amber-soft); border-radius:var(--radius-sm); padding:.55rem .75rem; margin:.45rem 0; font-size:.78rem; }
-    .resolved-box { background:var(--mint-soft); }
-    .overall { font-size:.95rem; font-weight:800; margin-top:.5rem; }
-    .ev-list { font-size:.7rem; color:var(--muted); margin-top:.4rem; line-height:1.5; }
+    .status { color:var(--muted); font-size:.8rem; min-height:1rem; margin-top:.4rem; }
     .ok { color:var(--mint); } .warn { color:var(--amber); } .bad { color:var(--coral); } .miss { color:var(--muted); }
-    .notice { font-size:.82rem; line-height:1.5; background:var(--sky-soft); border-radius:var(--radius-sm); padding:.6rem .8rem; }
 
-    /* ---------- your version ---------- */
-    .ver-head { display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap; }
-    #levelLabel { font-size:.68rem; }
-    #capo { font-size:1rem; font-weight:800; color:var(--violet); }
-    .chord-chip { cursor:pointer; border-bottom:2px dotted var(--violet); }
-    #metrics { font-size:.78rem; color:var(--muted); }
-    .bars { margin-top:.6rem; }
-    .bar-row { display:flex; align-items:center; gap:.6rem; margin:.32rem 0; font-size:.76rem; }
-    .bar-row > span:first-child { width:4.6rem; color:var(--muted); }
-    .bar-row .bar { background:var(--card-soft); }
-    .bar-row:nth-child(1) .bar > span { background:var(--coral); }
-    .bar-row:nth-child(2) .bar > span { background:var(--violet); }
-    .reduction { display:inline-block; background:var(--mint-soft); color:#0b7d5c; font-weight:800; font-size:.8rem; border-radius:99px; padding:.3rem .75rem; margin-top:.5rem; }
-    .mapping { margin-top:.5rem; font-size:.92rem; display:flex; flex-wrap:wrap; gap:.3rem 1.1rem; }
-    .mapping div { white-space:nowrap; }
-    .mapping .played { font-weight:800; }
-    .mapping .arrow { color:var(--muted); }
-    ul, ol { padding-left:1.05rem; margin:.4rem 0; }
-    li { margin:.3rem 0; font-size:.84rem; }
-    #why li::marker { color:var(--mint); }
+    /* ---------- left: now learning ---------- */
+    .learn-row { display:flex; align-items:center; gap:12px; }
+    .learn-meta { min-width:0; }
+    #songTitle { font-size:1.3rem; font-weight:800; letter-spacing:-.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .learn-sub { font-size:.8rem; color:var(--muted); line-height:1.4; margin-top:.15rem; }
 
-    /* ---------- practice ---------- */
+    /* ---------- left: understanding ---------- */
+    .facts { display:flex; gap:1rem; flex-wrap:wrap; margin:.1rem 0 .3rem; }
+    .facts span { font-size:1.2rem; font-weight:800; letter-spacing:-.02em; }
+    .facts label { display:block; font-size:.62rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+    .chords { font-size:1.05rem; font-weight:800; letter-spacing:.05em; color:var(--mint); margin:.25rem 0; }
+    .bar { height:6px; background:var(--line); border-radius:5px; overflow:hidden; }
+    .bar > span { display:block; height:100%; background:var(--mint); border-radius:5px; }
+    .res-row { margin:.32rem 0; }
+    .res-row .res-head { display:flex; justify-content:space-between; font-size:.68rem; color:var(--muted); }
+    .res-row .res-head strong { color:var(--ink); font-size:.74rem; }
+    .res-value { font-size:.86rem; font-weight:700; }
+    .src-chip { display:inline-block; font-size:.66rem; font-weight:600; padding:.16rem .5rem; margin:.12rem .25rem .12rem 0; border-radius:99px; background:var(--sky-soft); color:#1f6bb5; text-decoration:none; }
+    .conflict-box { background:var(--amber-soft); border-radius:var(--radius-sm); padding:.5rem .65rem; margin:.4rem 0; font-size:.74rem; }
+    .resolved-box { background:var(--mint-soft); }
+    .overall { font-size:.9rem; font-weight:800; margin-top:.4rem; }
+    .ev-list { font-size:.68rem; color:var(--muted); margin-top:.35rem; line-height:1.5; }
+    .notice { font-size:.8rem; line-height:1.45; background:var(--sky-soft); border-radius:var(--radius-sm); padding:.55rem .7rem; }
+
+    /* ---------- hero: playable version ---------- */
+    .hero-wrap { flex:1; min-height:0; display:flex; flex-direction:column; }
+    .hero {
+      flex:1; min-height:0; background:var(--card); border-radius:24px; box-shadow:var(--shadow);
+      padding:20px 28px; display:flex; flex-direction:column; overflow:auto;
+    }
+    .hero-head { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+    .hero-title { font-size:1rem; font-weight:800; letter-spacing:-.01em; }
+    .capo-badge {
+      display:inline-flex; align-items:center; gap:.35rem; background:var(--violet); color:#fff;
+      font-weight:800; font-size:.85rem; border-radius:99px; padding:.34rem .85rem;
+    }
+    .easier-pill { display:inline-block; background:var(--mint-soft); color:#0b7d5c; font-weight:800; font-size:.9rem; border-radius:99px; padding:.34rem .9rem; }
+    .hero-stats { display:flex; gap:1.4rem; margin-left:auto; text-align:right; }
+    .hero-stats span { font-size:1.05rem; font-weight:800; }
+    .hero-stats label { display:block; font-size:.6rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+    .hero-chords { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; gap:clamp(1rem, 4vw, 3.2rem); padding:.6rem 0; flex-wrap:wrap; }
+    .hero-chord { text-align:center; border-radius:18px; padding:.6rem .7rem; border:2px solid transparent; transition:.15s; }
+    .hero-chord .hc-name { font-size:1.5rem; font-weight:800; letter-spacing:-.02em; margin-bottom:.15rem; }
+    .hero-chord .hc-map { margin-top:.3rem; font-size:.78rem; line-height:1.35; }
+    .hero-chord .hc-you { color:var(--muted); font-weight:600; }
+    .hero-chord .hc-you b { color:var(--ink); }
+    .hero-chord .hc-arrow { color:var(--violet); font-weight:800; }
+    .hero-chord .hc-song b { color:var(--violet); }
+    .hero-chord.current { border-color:var(--mint); background:var(--mint-soft); }
+    .hero-chord.current .hc-name { color:var(--mint); }
+    .hero-chord.current::after { content:"▲ NOW PLAYING"; display:block; font-size:.6rem; font-weight:800; color:var(--mint); letter-spacing:.08em; margin-top:.2rem; }
+    .app:not(.playing) .hero-chord:not(.current) { opacity:.96; }
+    .why-line { display:flex; gap:.5rem 1.2rem; flex-wrap:wrap; font-size:.78rem; color:#4d4a43; border-top:1px dashed var(--line); padding-top:.7rem; margin-top:.3rem; }
+    .why-line .why-chip::before { content:"✓ "; color:var(--mint); font-weight:800; }
+    .hero-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:.7rem; }
+    .hero-empty .big { font-size:1.35rem; font-weight:800; letter-spacing:-.02em; max-width:26rem; }
+    .hero-empty .sub { color:var(--muted); font-size:.9rem; max-width:30rem; line-height:1.5; }
+    .strings { opacity:.5; }
+
+    /* ---------- practice strip ---------- */
+    .practice {
+      flex:none; margin-top:14px; background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:12px 18px; display:flex; flex-direction:column; gap:.45rem;
+    }
+    .practice.flash { outline:2px solid var(--mint); }
     .chip, .toggle, .levels button {
-      font:inherit; font-size:.78rem; font-weight:600; padding:.42rem .7rem; border-radius:99px;
+      font:inherit; font-size:.75rem; font-weight:600; padding:.36rem .66rem; border-radius:99px;
       border:1.5px solid var(--line); background:var(--card-soft); color:var(--ink); cursor:pointer;
     }
     .chip.sel, .toggle.active, .levels button.active { background:var(--mint-soft); border-color:var(--mint); color:#0b7d5c; }
-    .chip { margin:0 .35rem .35rem 0; }
-    .levels { display:flex; gap:.4rem; flex-wrap:wrap; }
-    .levels button { flex:none; }
-    .go {
-      font:inherit; font-weight:700; border:none; border-radius:12px; cursor:pointer;
-      background:var(--ink); color:#fff; padding:.62rem 1rem; font-size:.86rem;
-    }
+    .chip { margin:0 .3rem .3rem 0; }
+    .levels { display:flex; gap:.35rem; flex-wrap:wrap; }
+    .go { font:inherit; font-weight:700; border:none; border-radius:12px; cursor:pointer; background:var(--ink); color:#fff; padding:.55rem .95rem; font-size:.84rem; }
     .go.secondary { background:var(--card-soft); color:var(--ink); }
     .go:disabled { opacity:.4; cursor:not-allowed; }
-    .transport { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
-    .transport .go { margin:0; }
-    .studio-row { display:flex; align-items:center; gap:.7rem; margin:.5rem 0 0; font-size:.78rem; }
-    .studio-row input[type=range] { flex:1; accent-color:var(--mint); max-width:280px; }
-    .studio-chords { display:flex; gap:.55rem; flex-wrap:wrap; margin:.4rem 0 .5rem; }
-    .studio-chords .chord-slot { text-align:center; cursor:pointer; padding:.3rem; border-radius:14px; border:1.5px solid transparent; transition:.15s; }
-    .studio-chords .chord-slot.current { border-color:var(--mint); background:var(--mint-soft); }
-    .studio-chords svg { color:var(--ink); }
-    .studio-chords .chord-slot.current svg { color:var(--mint); }
-    .timeline { display:flex; gap:3px; margin:.3rem 0; height:10px; }
-    .timeline .tl-seg { background:var(--line); border-radius:3px; min-width:8px; }
-    .timeline .tl-seg.playing { background:var(--mint); }
-    .nowline { min-height:1.2rem; font-size:.92rem; font-weight:800; color:var(--mint); }
-    .card.flash { outline:2px solid var(--mint); }
     button { font:inherit; }
     #studioPlay { background:var(--mint); }
     #studioPlay:hover { background:#0da273; }
+    .practice-row { display:flex; align-items:center; gap:.55rem; flex-wrap:wrap; }
+    .studio-row { display:flex; align-items:center; gap:.6rem; font-size:.76rem; }
+    .studio-row input[type=range] { width:170px; accent-color:var(--mint); }
+    .nowline { min-height:1.1rem; font-size:.88rem; font-weight:800; color:var(--mint); }
+    .sectionDetail { font-size:.72rem; }
+    #sectionDetail { font-size:.72rem; }
+    #studioStatus { font-size:.76rem; }
+    #studioSub { font-size:.74rem; }
+    .status { min-height:0; }
 
     /* ---------- drawers ---------- */
     .backdrop { position:fixed; inset:0; background:rgba(29,28,26,.28); opacity:0; pointer-events:none; transition:.2s; z-index:40; }
@@ -193,7 +158,7 @@
     .drawer h2 { font-size:1.05rem; margin:.2rem 0 1rem; display:flex; align-items:center; }
     .drawer .close { margin-left:auto; border:none; background:var(--card); border-radius:99px; width:30px; height:30px; cursor:pointer; color:var(--muted); box-shadow:var(--shadow); }
     .drawer .card { margin-bottom:12px; box-shadow:0 4px 16px rgba(29,28,26,.05); }
-    .drawer label { display:block; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:.8rem 0 .35rem; }
+    .drawer label { display:block; font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:.8rem 0 .35rem; }
     .drawer input[type=text], .drawer input:not([type]) {
       width:100%; font:inherit; font-size:.9rem; padding:.6rem .8rem; border-radius:12px;
       border:1.5px solid var(--line); background:#fff; color:var(--ink); outline:none;
@@ -205,6 +170,10 @@
     .ladder-item { padding:.7rem .8rem; border-radius:var(--radius-sm); background:#fff; cursor:pointer; box-shadow:0 2px 8px rgba(29,28,26,.05); }
     .ladder-item.sel { outline:2px solid var(--mint); }
     .source-card img { max-width:100%; border-radius:12px; margin-bottom:.5rem; }
+    #agentFeed .feed-item { display:flex; gap:8px; font-size:.78rem; line-height:1.4; color:#4d4a43; padding:.4rem 0; border-bottom:1px dashed var(--line); }
+    #agentFeed .feed-item::before { content:""; flex:none; width:7px; height:7px; border-radius:50%; background:var(--mint); margin-top:.28rem; }
+    #agentFeed .feed-item.warn::before { background:var(--amber); }
+    #sourcesList .ev-list { font-size:.75rem; }
 
     /* debug drawer keeps dev look */
     #webmcpDebug { font-size:.72rem; color:#4d4a43; }
@@ -222,7 +191,7 @@
   <div class="shell">
     <header>
       <div class="logo">
-        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+        <svg width="25" height="25" viewBox="0 0 26 26" fill="none" aria-hidden="true">
           <circle cx="13" cy="13" r="12" fill="#1d1c1a"/>
           <circle cx="13" cy="13" r="4.5" fill="#faf9f6"/>
           <circle cx="13" cy="13" r="1.6" fill="#12b981"/>
@@ -230,23 +199,25 @@
         </svg>
         Playable
       </div>
-      <svg width="72" height="16" viewBox="0 0 72 16" aria-hidden="true" style="opacity:.5">
+      <svg width="64" height="15" viewBox="0 0 72 16" aria-hidden="true" style="opacity:.5">
         <path d="M1 8 Q5 1 9 8 T17 8 T25 8 T33 8 T41 8 T49 8 T57 8 T65 8 T73 8" fill="none" stroke="#8b7cf6" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
       <span id="webmcpStatus" class="pill">Checking WebMCP…</span>
       <span class="spacer"></span>
+      <button type="button" class="corner-btn" id="openActivity">Activity</button>
+      <button type="button" class="corner-btn" id="openSources">Sources</button>
       <button type="button" class="corner-btn" id="openDetails">Details</button>
       <button type="button" class="corner-btn" id="openManual">Manual</button>
       <button type="button" class="corner-btn" id="openDebug">Debug</button>
     </header>
 
-    <div class="app">
-      <!-- NOW LEARNING -->
-      <div class="area-learn">
+    <div class="app" id="appRoot">
+      <!-- LEFT: context -->
+      <div class="col-left">
         <div class="card" style="flex:none">
           <div class="eyebrow"><span class="tagdot" style="background:var(--coral)"></span>Now Learning</div>
           <div class="learn-row">
-            <svg class="cassette" width="58" height="38" viewBox="0 0 58 38" fill="none" aria-hidden="true">
+            <svg width="52" height="34" viewBox="0 0 58 38" fill="none" aria-hidden="true" style="flex:none">
               <rect x="1.5" y="1.5" width="55" height="35" rx="7" fill="#fff" stroke="#eceae3" stroke-width="2"/>
               <rect x="10" y="9" width="38" height="14" rx="4" fill="#f4f3ee"/>
               <circle cx="19" cy="16" r="4" fill="#fff" stroke="#8b7cf6" stroke-width="1.8"/>
@@ -254,102 +225,100 @@
               <path d="M18 28 l4 4 M24 28 l4 4 M30 28 l4 4 M36 28 l4 4" stroke="#12b981" stroke-width="1.6" stroke-linecap="round"/>
             </svg>
             <div class="learn-meta">
-              <div id="songTitle" class="learn-title">—</div>
-              <div class="learn-sub" id="learnSub">Tell your AI agent what song you want to learn.</div>
+              <div id="songTitle">—</div>
+              <div id="artistLine" class="muted" style="font-size:.78rem"></div>
+              <div class="learn-sub" id="learnSub">Tell your AI agent what you want to learn.</div>
             </div>
           </div>
-          <div class="mini-input">
-            <input id="songName" placeholder='Try "Perfect by Ed Sheeran"' aria-label="Song name" />
-            <button type="button" class="mini-go" id="requestSong">Learn it</button>
-          </div>
-          <div class="status" id="requestStatus"></div>
         </div>
-      </div>
 
-      <!-- YOUR VERSION (hero result) -->
-      <div class="area-result">
-        <div class="card" id="resultEmpty">
-          <div class="eyebrow"><span class="tagdot" style="background:var(--violet)"></span>Your Version</div>
-          <div style="font-size:1.05rem; font-weight:700; margin:.3rem 0 .2rem">Ready to Play</div>
-          <div class="muted" style="font-size:.84rem; line-height:1.5">Once your agent resolves the song, your easiest faithful arrangement appears here — capo, chords, difficulty and fidelity.</div>
-        </div>
-        <div class="card hidden" id="versionCard">
-          <div class="eyebrow"><span class="tagdot" style="background:var(--violet)"></span>Your Version</div>
-          <div class="ver-head"><span id="levelLabel" class="eyebrow" style="margin:0">YOUR VERSION</span><span id="capo"></span></div>
-          <div class="chords" id="chords"></div>
-          <div id="metrics"></div>
-          <div class="bars" id="bars"></div>
-        </div>
-        <div class="card hidden" id="mappingCard">
-          <div class="eyebrow"><span class="tagdot" style="background:var(--sky)"></span>Played vs Sounding</div>
-          <div class="mapping" id="mapping"></div>
-        </div>
-        <div class="card hidden" id="whyCard">
-          <div class="eyebrow"><span class="tagdot" style="background:var(--mint)"></span>Why this fits you</div>
-          <ul id="why"></ul>
-        </div>
-      </div>
-
-      <!-- AI ACTIVITY -->
-      <div class="area-activity">
-        <div class="card" style="display:flex; flex-direction:column; min-height:0">
-          <div class="eyebrow"><span class="tagdot" style="background:var(--amber)"></span>AI Agent Activity</div>
-          <div id="agentFeed" class="hidden"></div>
-          <div class="muted" style="font-size:.78rem" id="feedEmpty">Agent actions appear here — song requests, research, evidence, arrangements.</div>
-        </div>
-      </div>
-
-      <!-- SONG UNDERSTANDING -->
-      <div class="area-understand">
-        <div class="card">
+        <div class="card" style="flex:none">
           <div class="eyebrow"><span class="tagdot" style="background:var(--sky)"></span>Song Understanding</div>
           <div id="analysis"></div>
         </div>
-        <div class="card hidden" id="researchCard">
+
+        <div class="card hidden" id="researchCard" style="flex:none">
           <div class="eyebrow"><span class="tagdot" style="background:var(--mint)"></span>Research</div>
-          <div id="researchBoard" style="max-height:300px; overflow:auto"></div>
+          <div id="researchBoard" style="max-height:26vh; overflow:auto"></div>
           <div class="status" id="researchHint"></div>
         </div>
       </div>
 
-      <!-- PRACTICE -->
-      <div class="area-practice">
-        <div class="card" id="practiceEmpty">
-          <div class="eyebrow"><span class="tagdot" style="background:var(--mint)"></span>Practice</div>
-          <div style="font-size:1.05rem; font-weight:700; margin:.3rem 0 .2rem">Your studio is warming up</div>
-          <div class="muted" style="font-size:.84rem; line-height:1.5">Chord diagrams, loop, metronome and a synthesized preview of exactly what you should play appear once your version is compiled. The human always presses Play.</div>
-        </div>
-        <div class="card hidden" id="sectionCard">
-          <div class="eyebrow"><span class="tagdot" style="background:var(--coral)"></span>Start Here</div>
-          <div id="sections"></div>
-          <div id="sectionDetail" class="muted" style="font-size:.78rem"></div>
-        </div>
-        <div class="card hidden" id="studioCard" style="flex:1; min-height:0; overflow:auto">
-          <div class="eyebrow"><span class="tagdot" style="background:var(--mint)"></span><span id="studioTitle">Practice Studio</span></div>
-          <div id="studioSub" class="muted" style="font-size:.78rem; margin-bottom:.4rem"></div>
-          <div class="studio-chords" id="studioChords"></div>
-          <div class="timeline" id="studioTimeline"></div>
-          <div class="nowline" id="nowChord"></div>
-          <div class="transport">
-            <button type="button" class="go" id="studioPlay">▶ Play</button>
-            <button type="button" class="go secondary" id="studioStop">■ Stop</button>
-            <button type="button" class="toggle" id="studioLoop">Loop</button>
-            <button type="button" class="toggle" id="studioMetronome">Metronome</button>
+      <!-- RIGHT: playable version hero -->
+      <div class="col-right hero-wrap">
+        <div class="hero" id="heroCard">
+          <div class="hero-empty" id="resultEmpty">
+            <svg class="strings" width="220" height="70" viewBox="0 0 220 70" fill="none" aria-hidden="true">
+              <g stroke="#8b7cf6" stroke-width="1.4" stroke-linecap="round">
+                <line x1="10" y1="8" x2="210" y2="8"/><line x1="10" y1="19" x2="210" y2="19"/>
+                <line x1="10" y1="30" x2="210" y2="30"/><line x1="10" y1="41" x2="210" y2="41"/>
+                <line x1="10" y1="52" x2="210" y2="52"/><line x1="10" y1="63" x2="210" y2="63"/>
+              </g>
+              <circle cx="150" cy="8" r="4" fill="#12b981"/><circle cx="120" cy="30" r="4" fill="#ff6f5e"/>
+            </svg>
+            <div class="big" id="heroEmptyTitle">Waiting for your agent to build a version that fits your hands.</div>
+            <div class="sub" id="heroEmptySub">Once it compiles, your chord shapes, capo and difficulty appear right here.</div>
           </div>
-          <div class="studio-row">
-            <span class="muted">Tempo</span>
-            <input type="range" id="tempoSlider" min="50" max="100" step="10" value="70" aria-label="Practice tempo" />
-            <span id="tempoLabel" style="font-weight:800; color:var(--mint)">70%</span>
-            <span class="muted" style="margin-left:auto">Count-in</span>
-            <div class="levels" style="margin:0">
-              <button type="button" data-countin="0">Off</button>
-              <button type="button" data-countin="1" class="active">1 bar</button>
-              <button type="button" data-countin="2">2 bars</button>
+
+          <div class="hidden" id="versionCard" style="display:flex; flex-direction:column; flex:1; min-height:0">
+            <div class="hero-head">
+              <span class="hero-title" id="levelLabel">YOUR PLAYABLE VERSION</span>
+              <span class="capo-badge" id="capo"></span>
+              <span class="easier-pill" id="easierPill"></span>
+              <div class="hero-stats">
+                <div><span id="statOriginal">—</span><label>Original</label></div>
+                <div><span id="statPlayer">—</span><label>For you</label></div>
+                <div><span id="statFidelity">—</span><label>Harmony kept</label></div>
+                <div><span id="statBarre">—</span><label>Barre chords</label></div>
+              </div>
             </div>
-            <button type="button" class="go secondary" id="studioPrepare" style="padding:.45rem .8rem; font-size:.78rem">Re-prepare</button>
+            <div class="hero-chords" id="heroChords"></div>
+            <div class="why-line" id="why"></div>
+            <!-- legacy render targets, kept hidden-safe -->
+            <div class="hidden" id="chords"></div>
+            <div class="hidden" id="metrics"></div>
+            <div class="hidden" id="bars"></div>
+            <div class="hidden" id="mapping"></div>
+            <div class="hidden" id="mappingCard"></div>
+            <div class="hidden" id="whyCard"></div>
           </div>
-          <div class="status" id="studioStatus"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- PRACTICE STRIP -->
+    <div class="practice" id="studioCard">
+      <div class="practice-row">
+        <span class="eyebrow" style="margin:0"><span class="tagdot" style="background:var(--mint)"></span>Practice</span>
+        <span id="studioSub" class="muted"></span>
+        <span id="sectionDetail" class="muted sectionDetail"></span>
+        <span class="spacer" style="flex:1"></span>
+        <span class="nowline" id="nowChord"></span>
+      </div>
+      <div class="practice-row" id="sectionCard">
+        <span class="muted" style="font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em">Sections</span>
+        <span id="sections"></span>
+      </div>
+      <div class="practice-row">
+        <button type="button" class="go" id="studioPlay">▶ Play</button>
+        <button type="button" class="go secondary" id="studioStop">■ Stop</button>
+        <button type="button" class="toggle" id="studioLoop">Loop</button>
+        <button type="button" class="toggle" id="studioMetronome">Metronome</button>
+        <div class="studio-row">
+          <span class="muted">Tempo</span>
+          <input type="range" id="tempoSlider" min="50" max="100" step="10" value="70" aria-label="Practice tempo" />
+          <span id="tempoLabel" style="font-weight:800; color:var(--mint)">70%</span>
+        </div>
+        <div class="studio-row">
+          <span class="muted">Count-in</span>
+          <div class="levels" style="margin:0">
+            <button type="button" data-countin="0">Off</button>
+            <button type="button" data-countin="1" class="active">1 bar</button>
+            <button type="button" data-countin="2">2 bars</button>
+          </div>
+        </div>
+        <button type="button" class="go secondary" id="studioPrepare" style="padding:.45rem .8rem; font-size:.76rem">Re-prepare</button>
+        <span id="studioStatus" class="muted"></span>
       </div>
     </div>
   </div>
@@ -357,8 +326,24 @@
   <!-- drawers -->
   <div class="backdrop" id="backdrop"></div>
 
+  <aside class="drawer" id="activityDrawer" aria-label="Agent activity">
+    <h2>Agent Activity <button type="button" class="close" data-close="activityDrawer">✕</button></h2>
+    <div class="card"><div id="agentFeed"></div><div class="muted" style="font-size:.76rem" id="feedEmpty">Agent actions appear here — song requests, research, evidence, arrangements.</div></div>
+  </aside>
+
+  <aside class="drawer" id="sourcesDrawer" aria-label="Research sources">
+    <h2>Sources <button type="button" class="close" data-close="sourcesDrawer">✕</button></h2>
+    <div class="card"><div id="sourcesList"><div class="muted" style="font-size:.78rem">Research provenance — domains and the compact facts submitted from each — appears here.</div></div></div>
+  </aside>
+
   <aside class="drawer" id="manualDrawer" aria-label="Manual mode">
     <h2>Manual mode <button type="button" class="close" data-close="manualDrawer">✕</button></h2>
+    <div class="card">
+      <div class="eyebrow">Request a song by name</div>
+      <input id="songName" placeholder='Try "Perfect by Ed Sheeran"' aria-label="Song name" />
+      <button type="button" class="go" id="requestSong">Learn it</button>
+      <div class="status" id="requestStatus"></div>
+    </div>
     <div class="card">
       <div class="eyebrow">Your level</div>
       <div class="levels">

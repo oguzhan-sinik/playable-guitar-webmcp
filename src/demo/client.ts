@@ -42,11 +42,11 @@ const err = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 const pct = (before: number, after: number): number =>
   before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
 
-const diagramSvg = (name: string, capo: number): string => {
+const diagramSvg = (name: string, capo: number, width = 86, height = 122): string => {
   const shape = chordDiagramFor(name, capo);
   return shape !== undefined
-    ? chordDiagramSvg(shape, { width: 86, height: 122 })
-    : `<div class="muted" style="width:86px">${name}</div>`;
+    ? chordDiagramSvg(shape, { width, height })
+    : `<div class="muted" style="width:${width}px">${name}</div>`;
 };
 
 function render(): void {
@@ -66,8 +66,13 @@ function render(): void {
       : state.arrangement !== null
         ? 'Your version is ready — press Play in Practice.'
         : state.songId.length > 0
-          ? 'A song is loaded — ask your agent to compile your version, or type a different song below.'
-          : 'Tell your AI agent what song you want to learn — or type one below.';
+          ? 'A song is loaded — ask your agent to compile your version.'
+          : 'Tell your AI agent what you want to learn.';
+  const artist =
+    state.research?.identity?.artist !== undefined && state.research.identity.artist.length > 0
+      ? state.research.identity.artist
+      : '';
+  $('artistLine').textContent = artist;
 
   document.querySelectorAll<HTMLButtonElement>('.levels button[data-level]').forEach((b) => {
     b.classList.toggle('active', b.dataset.level === state.level);
@@ -117,28 +122,34 @@ function render(): void {
   $('resultEmpty').classList.toggle('hidden', r !== null);
   $('versionCard').classList.toggle('hidden', r === null);
   $('ladderCard').classList.toggle('hidden', r === null);
-  $('mappingCard').classList.toggle('hidden', r === null || r.mapping.length === 0);
-  $('studioCard').classList.toggle('hidden', r === null);
   if (r !== null) {
-    $('levelLabel').textContent = `${r.level} VERSION`;
-    $('capo').textContent = r.capo > 0 ? `Capo ${r.capo}` : 'No capo';
-    $('chords').innerHTML = r.chords.map((c) => `<span class="chord-chip" data-chord="${c}">${c}</span>`).join(' ');
-    $('metrics').innerHTML =
-      `Arrangement fidelity ${Math.round(r.fidelity * 100)}% · Tempo ${Math.round(r.tempoBpm)} BPM` +
-      (r.sourceConfidence !== undefined
-        ? ` · Song understanding ${Math.round(r.sourceConfidence.harmonyConfidence * 100)}%`
-        : '') +
-      (r.barreChordCount > 0 ? ` · ${r.barreChordCount} barre chord${r.barreChordCount > 1 ? 's' : ''}` : ' · no barre chords');
-    const reduction = pct(r.difficultyBefore, r.difficultyAfter);
-    const playerReduction =
+    $('levelLabel').textContent = `YOUR PLAYABLE VERSION · ${r.level}`;
+    $('capo').textContent = r.capo > 0 ? `CAPO ${r.capo}` : 'NO CAPO';
+    const reduction =
       r.playerDifficulty !== undefined && r.difficultyBefore > 0
         ? pct(r.difficultyBefore, r.playerDifficulty)
-        : null;
-    $('bars').innerHTML = `
-      <div class="bar-row"><span>Original</span><div class="bar"><span style="width:${Math.min(100, r.difficultyBefore * 10)}%"></span></div><span>${r.difficultyBefore.toFixed(2)} / 10</span></div>
-      <div class="bar-row"><span>Your version</span><div class="bar"><span style="width:${Math.min(100, r.difficultyAfter * 10)}%"></span></div><span>${r.difficultyAfter.toFixed(2)} / 10</span></div>
-      ${r.playerDifficulty !== undefined ? `<div class="bar-row"><span>For you</span><div class="bar"><span style="width:${Math.min(100, r.playerDifficulty * 10)}%"></span></div><span>${r.playerDifficulty.toFixed(2)} / 10</span></div>` : ''}
-      ${playerReduction !== null && playerReduction > 0 ? `<div class="reduction">↓ ${playerReduction}% easier for you</div>` : reduction > 0 ? `<div class="reduction">↓ ${reduction}% easier</div>` : ''}`;
+        : pct(r.difficultyBefore, r.difficultyAfter);
+    $('easierPill').textContent = reduction > 0 ? `${reduction}% easier` : 'easiest found';
+    $('statOriginal').textContent = r.difficultyBefore.toFixed(2);
+    $('statPlayer').textContent =
+      r.playerDifficulty !== undefined ? `${r.playerDifficulty.toFixed(2)} · ${Math.round(r.tempoBpm)} BPM` : r.difficultyAfter.toFixed(2);
+    $('statFidelity').textContent = `${Math.round(r.fidelity * 100)}%`;
+    $('statBarre').textContent = r.barreChordCount > 0 ? String(r.barreChordCount) : '0';
+    // hero chord diagrams: the played shape + the sounding harmony it produces
+    const soundingFor = (played: string): string | undefined => r.mapping.find((m) => m.played === played)?.sounding;
+    $('heroChords').innerHTML = r.chords
+      .map((c) => {
+        const sounding = soundingFor(c);
+        return `<div class="hero-chord chord-slot" data-chord-slot="${c}" title="${c} — click to enlarge">
+          <div class="hc-name">${c}</div>
+          ${diagramSvg(c, r.capo, 132, 168)}
+          <div class="hc-map">
+            <div class="hc-you">YOU PLAY <b>${c}</b></div>
+            ${sounding !== undefined ? `<div class="hc-arrow">↓</div><div class="hc-song">SONG HEARS <b>${sounding}</b></div>` : ''}
+          </div>
+        </div>`;
+      })
+      .join('');
     $('ladder').innerHTML = r.ladder
       .map(
         (e) => `<div class="ladder-item ${e.level === state.level ? 'sel' : ''}" data-level="${e.level}">
@@ -147,23 +158,16 @@ function render(): void {
       </div>`,
       )
       .join('');
-    $('mapping').innerHTML =
-      r.mapping
-        .map((m) => `<div><span class="played">${m.played}</span> <span class="arrow">→</span> ${m.sounding}</div>`)
-        .join('') + (r.capo > 0 ? `<div class="muted">Capo ${r.capo}</div>` : '');
-
     renderStudio();
   }
 
-  // practice area placeholder: visible until section chips or the studio exist
-  const practiceActive = state.sections.length > 0 || r !== null;
-  $('practiceEmpty').classList.toggle('hidden', practiceActive);
-  $('sectionCard').classList.toggle('hidden', state.sections.length === 0);
-
+  // compact "why it fits" — max two lines, beside the stats
   const why = state.explanation;
-  $('whyCard').classList.toggle('hidden', why === null);
   if (why !== null) {
-    $('why').innerHTML = why.changes.map((c) => `<li>${c}</li>`).join('');
+    $('why').innerHTML = why.changes
+      .slice(0, 4)
+      .map((c) => `<span class="why-chip">${c}</span>`)
+      .join('');
   }
 
   $('sectionCard').classList.toggle('flash', state.currentSection !== null);
@@ -277,29 +281,39 @@ function renderResearch(): void {
     r.status === 'NEEDS_MORE_EVIDENCE' || r.status === 'RESEARCHING'
       ? (r.suggestedQueries ?? []).slice(0, 3).join(' · ')
       : '';
+
+  // Sources drawer: compact provenance — domains + the facts submitted from each
+  const evidence = r.evidence ?? [];
+  const sourcesEl = $('sourcesList');
+  if (evidence.length > 0) {
+    const byDomain = new Map<string, typeof evidence>();
+    for (const ev of evidence) {
+      const list = byDomain.get(ev.domain) ?? [];
+      list.push(ev);
+      byDomain.set(ev.domain, list);
+    }
+    sourcesEl.innerHTML =
+      `<div style="margin-bottom:.4rem"><span class="src-chip">${byDomain.size} independent source families</span></div>` +
+      [...byDomain.entries()]
+        .map(
+          ([domain, evs]) =>
+            `<div style="margin:.5rem 0"><strong style="font-size:.8rem">${domain}</strong>
+             <div class="ev-list">${evs.map((ev) => `${ev.claimType}: ${ev.value}${ev.section !== undefined ? ` (${ev.section})` : ''}`).join('<br />')}</div></div>`,
+        )
+        .join('');
+  }
 }
 
-/** The Practice Studio panel: diagrams + timeline + transport. */
+/** The Practice strip: controls only — the hero diagrams above stay the star. */
 function renderStudio(): void {
   const r = state.arrangement;
   if (r === null) return;
   const p = state.practice;
   const sectionName = state.currentSection?.type ?? p.section ?? 'SONG';
   const sectionOnly = state.analysis?.timingPrecision === 'SECTION_ONLY';
-  $('studioTitle').textContent = sectionOnly ? `PRACTICE STUDIO · Practice progression${sectionName !== 'SONG' ? ` · ${sectionName}` : ''}` : `PRACTICE STUDIO · ${sectionName}`;
   $('studioSub').innerHTML =
-    `${r.level.toLowerCase()} · ${r.capo > 0 ? `capo ${r.capo} · ` : ''}difficulty for you ${r.playerDifficulty !== undefined ? r.playerDifficulty.toFixed(1) : r.difficultyAfter.toFixed(1)} · fidelity ${Math.round(r.fidelity * 100)}% · tempo ${Math.round((p.tempoFactor) * 100)}%` +
+    `<strong>${sectionName === 'SONG' ? 'Full song' : `Start here: ${sectionName}`}</strong> · practice progression` +
     (sectionOnly ? ' · <span class="warn">section timing approximate</span>' : '');
-
-  const uniqueChords = [...new Set(r.chords)].slice(0, 6);
-  $('studioChords').innerHTML = uniqueChords
-    .map((c) => `<div class="chord-slot" data-chord-slot="${c}" title="${c} — click to enlarge">${diagramSvg(c, r.capo)}</div>`)
-    .join('');
-
-  // simple progression timeline: one segment per chord slot
-  $('studioTimeline').innerHTML = uniqueChords
-    .map((c) => `<div class="tl-seg" data-tl="${c}" style="flex:${Math.max(1, uniqueChords.length)}"></div>`)
-    .join('');
 
   ($('tempoSlider') as HTMLInputElement).value = String(Math.round(p.tempoFactor * 100));
   $('tempoLabel').textContent = `${Math.round(p.tempoFactor * 100)}%`;
@@ -320,15 +334,13 @@ function renderStudio(): void {
 let highlightedChord: string | null = null;
 function highlightChord(chord: string | null): void {
   highlightedChord = chord;
-  document.querySelectorAll<HTMLElement>('.chord-slot').forEach((el) => {
+  // hero diagrams carry the active-chord highlight
+  document.querySelectorAll<HTMLElement>('.hero-chord').forEach((el) => {
     el.classList.toggle('current', el.dataset.chordSlot === chord);
-  });
-  document.querySelectorAll<HTMLElement>('.tl-seg').forEach((el) => {
-    el.classList.toggle('playing', el.dataset.tl === chord);
   });
   $('nowChord').textContent =
     chord !== null && state.arrangement !== null
-      ? `Now: ${chord}${state.arrangement.capo > 0 ? ` (capo ${state.arrangement.capo})` : ''}`
+      ? `${chord}${state.arrangement.capo > 0 ? ` · capo ${state.arrangement.capo}` : ''}`
       : '';
 }
 
@@ -448,17 +460,16 @@ function bindManualControls(): void {
     const item = (ev.target as HTMLElement).closest<HTMLElement>('.ladder-item');
     if (item !== null) void compileVersion(item.dataset.level as SkillLevel);
   });
-  // click a chord anywhere → highlight its diagram in the studio
+  // click a chord anywhere → highlight its diagram in the hero
   document.body.addEventListener('click', (ev) => {
     const chip = (ev.target as HTMLElement).closest<HTMLElement>('[data-chord]');
     if (chip !== null) {
       highlightChord(chip.dataset.chord!);
-      $('studioCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   });
-  $('studioChords').addEventListener('click', (ev) => {
-    const slot = (ev.target as HTMLElement).closest<HTMLElement>('.chord-slot');
-    if (slot !== null) highlightChord(slot.dataset.chordSlot!);
+  $('heroChords').addEventListener('click', (ev) => {
+    const slot = (ev.target as HTMLElement).closest<HTMLElement>('.hero-chord');
+    if (slot !== null) highlightChord(slot.dataset.chordSlot === highlightedChord ? null : slot.dataset.chordSlot!);
   });
 
   // studio transport
@@ -535,6 +546,8 @@ function bindDrawers(): void {
     backdrop.classList.remove('show');
   };
   $('openManual').addEventListener('click', () => open('manualDrawer'));
+  $('openActivity').addEventListener('click', () => open('activityDrawer'));
+  $('openSources').addEventListener('click', () => open('sourcesDrawer'));
   $('openDetails').addEventListener('click', () => {
     if ($('planCard').classList.contains('hidden') && $('sessionCard').classList.contains('hidden') && $('ladderCard').classList.contains('hidden')) {
       $('detailsEmpty').classList.remove('hidden');
