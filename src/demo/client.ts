@@ -51,12 +51,9 @@ const diagramSvg = (name: string, capo: number, width = 86, height = 122): strin
 
 function render(): void {
   const statusPill = $('webmcpStatus');
-  statusPill.textContent =
-    state.webmcp === 'connected'
-      ? `AI Agent Connected · ${TOOL_COUNT} tools`
-      : state.webmcp === 'error'
-        ? 'WebMCP registration failed'
-        : 'AI tools unavailable — manual mode works';
+  // pill only exists in the UI when an agent surface is actually available
+  statusPill.classList.toggle('hidden', state.webmcp !== 'connected');
+  statusPill.textContent = `AI Agent Connected · ${TOOL_COUNT} tools`;
   statusPill.classList.toggle('on', state.webmcp === 'connected');
 
   // Now Learning subtitle tracks the product moment
@@ -122,6 +119,10 @@ function render(): void {
   $('resultEmpty').classList.toggle('hidden', r !== null);
   $('versionCard').classList.toggle('hidden', r === null);
   $('ladderCard').classList.toggle('hidden', r === null);
+  // left column: research board grows when active, agent-hints fill the rest
+  const researchVisible = state.research !== null && typeof state.research.status === 'string';
+  $('leftFiller').classList.toggle('hidden', researchVisible);
+  $('researchCard').style.flex = researchVisible ? '1' : 'none';
   if (r !== null) {
     $('levelLabel').textContent = `YOUR PLAYABLE VERSION · ${r.level}`;
     $('capo').textContent = r.capo > 0 ? `CAPO ${r.capo}` : 'NO CAPO';

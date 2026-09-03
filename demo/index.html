@@ -202,7 +202,7 @@
       <svg width="64" height="15" viewBox="0 0 72 16" aria-hidden="true" style="opacity:.5">
         <path d="M1 8 Q5 1 9 8 T17 8 T25 8 T33 8 T41 8 T49 8 T57 8 T65 8 T73 8" fill="none" stroke="#8b7cf6" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
-      <span id="webmcpStatus" class="pill">Checking WebMCP…</span>
+      <span id="webmcpStatus" class="pill hidden">Checking WebMCP…</span>
       <span class="spacer"></span>
       <button type="button" class="corner-btn" id="openActivity">Activity</button>
       <button type="button" class="corner-btn" id="openSources">Sources</button>
@@ -239,8 +239,20 @@
 
         <div class="card hidden" id="researchCard" style="flex:none">
           <div class="eyebrow"><span class="tagdot" style="background:var(--mint)"></span>Research</div>
-          <div id="researchBoard" style="max-height:26vh; overflow:auto"></div>
+          <div id="researchBoard" style="overflow:auto; min-height:0"></div>
           <div class="status" id="researchHint"></div>
+        </div>
+
+        <div class="card" id="leftFiller" style="flex:1; display:flex; flex-direction:column; justify-content:space-between">
+          <div>
+            <div class="eyebrow"><span class="tagdot" style="background:var(--violet)"></span>Try it with your agent</div>
+            <div style="font-size:.84rem; line-height:1.9; color:#4d4a43">
+              <div>“Teach me <strong>Perfect by Ed Sheeran</strong> — I’m a beginner, I have 20 minutes.”</div>
+              <div>“Find a version <strong>without barre chords</strong>.”</div>
+              <div>“Start with the <strong>chorus</strong> and prepare a preview.”</div>
+            </div>
+          </div>
+          <div class="muted" style="font-size:.74rem">The agent requests the song, researches it from public sources, and this page fills in as it works.</div>
         </div>
       </div>
 

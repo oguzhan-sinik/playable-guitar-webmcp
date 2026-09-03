@@ -20744,7 +20744,8 @@ var diagramSvg = (name, capo, width = 86, height = 122) => {
 };
 function render() {
   const statusPill = $("webmcpStatus");
-  statusPill.textContent = state.webmcp === "connected" ? `AI Agent Connected \xB7 ${TOOL_COUNT} tools` : state.webmcp === "error" ? "WebMCP registration failed" : "AI tools unavailable \u2014 manual mode works";
+  statusPill.classList.toggle("hidden", state.webmcp !== "connected");
+  statusPill.textContent = `AI Agent Connected \xB7 ${TOOL_COUNT} tools`;
   statusPill.classList.toggle("on", state.webmcp === "connected");
   $("learnSub").textContent = state.research !== null ? "Your AI agent is researching this song and adapting it for your level." : state.arrangement !== null ? "Your version is ready \u2014 press Play in Practice." : state.songId.length > 0 ? "A song is loaded \u2014 ask your agent to compile your version." : "Tell your AI agent what you want to learn.";
   const artist = state.research?.identity?.artist !== void 0 && state.research.identity.artist.length > 0 ? state.research.identity.artist : "";
@@ -20782,6 +20783,9 @@ function render() {
   $("resultEmpty").classList.toggle("hidden", r !== null);
   $("versionCard").classList.toggle("hidden", r === null);
   $("ladderCard").classList.toggle("hidden", r === null);
+  const researchVisible = state.research !== null && typeof state.research.status === "string";
+  $("leftFiller").classList.toggle("hidden", researchVisible);
+  $("researchCard").style.flex = researchVisible ? "1" : "none";
   if (r !== null) {
     $("levelLabel").textContent = `YOUR PLAYABLE VERSION \xB7 ${r.level}`;
     $("capo").textContent = r.capo > 0 ? `CAPO ${r.capo}` : "NO CAPO";
