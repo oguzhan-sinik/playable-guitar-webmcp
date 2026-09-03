@@ -236,10 +236,20 @@ describe('no-link research projections', () => {
       sourceKind: 'MUSIC_ANALYSIS_RESOURCE',
       value: { chords: ['Ab', 'Fm', 'Db', 'Eb'], section: 'chorus' },
     });
+    submit(s, {
+      claimType: 'FORM',
+      sourceUrl: 'https://a.example/form',
+      sourceKind: 'MUSIC_ANALYSIS_RESOURCE',
+      value: { sections: ['intro', 'verse', 'chorus', 'bridge', 'outro'] },
+    });
     const resolution = resolveSongResearch(s);
     expect(['READY', 'READY_WITH_WARNINGS']).toContain(resolution.status);
-    const { graph } = buildResearchSongGraph('research_test', resolution, { title: 'Test Song', artist: 'The Fixtures' });
+    const { graph, warnings } = buildResearchSongGraph('research_test', resolution, { title: 'Test Song', artist: 'The Fixtures' });
     expect(graph.harmony.chords.length).toBeGreaterThan(0);
     expect(graph.timingPrecision).toBe('SECTION_ONLY');
+    // EVERY form section reaches the practice grid — intro/verse/bridge/outro
+    // reuse the strongest resolved progression (chorus) at lower confidence
+    expect(graph.sections.map((sec) => sec.type)).toEqual(['INTRO', 'VERSE', 'CHORUS', 'BRIDGE', 'OUTRO']);
+    expect(warnings.some((w) => w.includes('reuse the strongest resolved progression'))).toBe(true);
   });
 });

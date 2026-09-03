@@ -32,16 +32,33 @@ export function buildResearchSongGraph(
   const denominator = resolution.meter?.denominator ?? 4;
   const beatMs = 60000 / bpm;
 
-  // section order: resolved structure first, then harmony sections
-  const sectionNames = resolution.structure.sectionOrder.filter((name) =>
-    resolution.harmony.sections.some((s) => s.section === name),
-  );
+  // section order: resolved structure first, then harmony-only sections.
+  // Form sections without their own progression evidence reuse the strongest
+  // resolved progression at lower confidence — the practice grid still covers
+  // the whole song instead of silently dropping sections.
+  const sectionNames = [...resolution.structure.sectionOrder];
   for (const s of resolution.harmony.sections) {
     if (!sectionNames.includes(s.section)) sectionNames.push(s.section);
   }
+  const strongest = [...resolution.harmony.sections].sort((a, b) => b.confidence - a.confidence)[0];
   const sections = sectionNames.length > 0
-    ? sectionNames.map((name) => resolution.harmony.sections.find((s) => s.section === name)!)
+    ? sectionNames
+        .map((name) => {
+          const own = resolution.harmony.sections.find((s) => s.section === name);
+          if (own !== undefined) return own;
+          if (strongest === undefined) return undefined;
+          return {
+            section: name,
+            chords: strongest.chords,
+            families: strongest.families,
+            confidence: strongest.confidence * 0.5,
+          };
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== undefined)
     : [];
+  if (sections.some((s) => !resolution.harmony.sections.some((h) => h.section === s.section))) {
+    warnings.push('Some sections have no dedicated chord evidence — they reuse the strongest resolved progression.');
+  }
 
   const beatEvents: SongGraph['beats'] = [];
   const sectionEvents: SongGraph['sections'] = [];
