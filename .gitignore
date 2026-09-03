@@ -27,3 +27,4 @@ demo/app.js
 .DS_Store
 Thumbs.db
 *.log
+tests/.run/

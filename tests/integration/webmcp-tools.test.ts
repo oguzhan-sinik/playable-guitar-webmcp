@@ -21,11 +21,12 @@ import {
 import type { SongGraph } from '../../src/domain/music/song-graph.js';
 
 /**
- * WebMCP tool tests run against the real demo song graph on disk
- * (.data/songs/song_07c596988b8d/graph.json) with a mocked
- * document.modelContext — the same registration path a browser agent uses.
+ * WebMCP tool tests run against the committed demo song graph
+ * (seed/demo-song, seeded into the test data dir by tests/setup/demo-song.ts)
+ * with a mocked document.modelContext — the same registration path a browser
+ * agent uses.
  */
-const DEMO_SONG = 'song_07c596988b8d';
+const DEMO_SONG = 'song_5c0d7b45538b';
 
 type RegisteredTool = {
   name: string;
