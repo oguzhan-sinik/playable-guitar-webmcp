@@ -1,0 +1,40 @@
+{
+  "name": "playable",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "guitar": "./src/cli/index.ts"
+  },
+  "scripts": {
+    "guitar": "tsx src/cli/index.ts",
+    "demo": "lsof -ti :3847 | xargs kill 2>/dev/null; tsx src/demo/server.ts",
+    "build:web": "node_modules/esbuild/bin/esbuild src/demo/client.ts --bundle --format=esm --outfile=demo/app.js",
+    "build": "pnpm build:web",
+    "start": "tsx src/demo/server.ts",
+    "demo:all": "pnpm build && lsof -ti :3847 | xargs kill 2>/dev/null; tsx src/demo/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "packageManager": "pnpm@11.2.2",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
+    "@langchain/anthropic": "^1.5.9",
+    "@langchain/google": "^0.2.4",
+    "@langchain/langgraph": "^1.4.13",
+    "commander": "^15.0.0",
+    "essentia.js": "^0.1.3",
+    "google-auth-library": "^11.0.2",
+    "langchain": "^1.5.10",
+    "tsx": "^4.23.13",
+    "zod": "^4.5.4",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "@langchain/core": "^1.2.9",
+    "@types/node": "^26.4.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

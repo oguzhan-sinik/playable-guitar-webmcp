@@ -1,0 +1,250 @@
+{
+  "metadata": {
+    "title": "Dense Rhythm",
+    "durationMs": 0
+  },
+  "global": {
+    "bpm": 120,
+    "timeSignature": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tuningReferenceHz": 440
+  },
+  "beats": [],
+  "sections": [],
+  "harmony": {
+    "chords": [
+      {
+        "startBeat": 0,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 0.25,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 0.5,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 0.75,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 1,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 1.5,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 1.75,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 2,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 2.25,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 2.5,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 2.75,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 3,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 3.25,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 3.5,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 3.75,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 3.875,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 4,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 4.25,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 4.5,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 4.75,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 5,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 5.5,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 5.75,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 6,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 6.25,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 6.5,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 6.75,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 7,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 7.25,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 7.5,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 7.75,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 7.875,
+        "durationBeats": 0.25,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      }
+    ]
+  },
+  "motifs": [],
+  "confidence": {
+    "overall": 1
+  },
+  "id": "graph_dense_rhythm",
+  "title": "Dense Rhythm"
+}

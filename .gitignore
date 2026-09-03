@@ -1,0 +1,21 @@
+node_modules/
+.data/
+.demo/
+dist/
+.local-benchmarks/
+.claude/
+
+# local Python MIR stack (dev-only; 900MB venv, not needed on Render) — see mir/README or PRODUCT_SPEC
+mir/
+
+# secrets
+.env
+.env.*
+*.pem
+google-credentials*.json
+credentials/
+
+# downloaded/generated media from link ingestion — never commit source audio
+demo/audio/
+demo/public/audio/*.wav
+data/tmp/

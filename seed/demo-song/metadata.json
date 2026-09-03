@@ -1,0 +1,11 @@
+{
+  "id": "song_5c0d7b45538b",
+  "title": "WebMCP Demo Song",
+  "artist": "Playable",
+  "source": {
+    "type": "local",
+    "original": "/tmp/webmcp-demo-song.wav"
+  },
+  "durationMs": 228571,
+  "createdAt": "2026-09-02T17:26:45.226Z"
+}

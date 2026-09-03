@@ -1,0 +1,164 @@
+{
+  "metadata": {
+    "title": "Fast Melody",
+    "durationMs": 0
+  },
+  "global": {
+    "bpm": 160,
+    "timeSignature": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tuningReferenceHz": 440
+  },
+  "beats": [],
+  "sections": [
+    {
+      "id": "sec_1",
+      "type": "VERSE",
+      "startBeat": 0,
+      "endBeat": 8,
+      "confidence": 1,
+      "importance": 1
+    }
+  ],
+  "harmony": {
+    "chords": []
+  },
+  "motifs": [
+    {
+      "id": "motif_1",
+      "sectionId": "sec_1",
+      "type": "RIFF",
+      "eventIds": [
+        "n0",
+        "n1",
+        "n2",
+        "n3"
+      ],
+      "salience": 0.9,
+      "recognizabilityImportance": 0.95
+    }
+  ],
+  "confidence": {
+    "overall": 1
+  },
+  "id": "graph_fast_melody",
+  "title": "Fast Melody",
+  "melody": {
+    "notes": [
+      {
+        "id": "n0",
+        "midi": 76,
+        "startBeat": 0,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n1",
+        "midi": 74,
+        "startBeat": 0.5,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n2",
+        "midi": 72,
+        "startBeat": 1,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n3",
+        "midi": 69,
+        "startBeat": 1.5,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n4",
+        "midi": 71,
+        "startBeat": 2,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n5",
+        "midi": 72,
+        "startBeat": 2.5,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n6",
+        "midi": 74,
+        "startBeat": 3,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n7",
+        "midi": 76,
+        "startBeat": 3.5,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n8",
+        "midi": 72,
+        "startBeat": 4,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n9",
+        "midi": 69,
+        "startBeat": 4.5,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n10",
+        "midi": 67,
+        "startBeat": 5,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n11",
+        "midi": 69,
+        "startBeat": 5.5,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n12",
+        "midi": 71,
+        "startBeat": 6,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n13",
+        "midi": 74,
+        "startBeat": 6.5,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n14",
+        "midi": 72,
+        "startBeat": 7,
+        "durationBeats": 0.5,
+        "confidence": 1
+      },
+      {
+        "id": "n15",
+        "midi": 69,
+        "startBeat": 7.5,
+        "durationBeats": 0.5,
+        "confidence": 1
+      }
+    ]
+  }
+}

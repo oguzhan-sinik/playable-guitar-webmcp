@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "2",
+  "strategy": {
+    "rhythmProviders": [
+      "beat-this",
+      "madmom-downbeat",
+      "madmom-beat",
+      "all-in-one",
+      "essentia"
+    ],
+    "chordProviders": [
+      "essentia",
+      "deepchroma",
+      "cnn-crf"
+    ],
+    "useSourceSeparation": true,
+    "chordAudioVariants": [
+      "FULL_MIX",
+      "NO_VOCALS",
+      "HARMONIC_MIX"
+    ],
+    "consensus": {
+      "enabled": true
+    },
+    "rhythmConsensus": {
+      "enabled": true
+    },
+    "rhythmWeights": {
+      "beat-this": 1.3,
+      "madmom-downbeat": 1.3,
+      "madmom-beat": 1.2,
+      "all-in-one": 1,
+      "essentia": 0.8
+    },
+    "device": "cpu"
+  },
+  "tempo": {
+    "bpm": 63,
+    "confidence": 0.94,
+    "alternatives": [
+      {
+        "bpm": 187.5,
+        "confidence": 0.75,
+        "provider": "all-in-one",
+        "relation": "OTHER",
+        "derived": true
+      },
+      {
+        "bpm": 189.5,
+        "confidence": 0.75,
+        "provider": "all-in-one",
+        "relation": "OTHER",
+        "derived": true
+      },
+      {
+        "bpm": 189,
+        "confidence": 0.75,
+        "provider": "all-in-one",
+        "relation": "OTHER",
+        "derived": true
+      }
+    ]
+  },
+  "key": "G# major",
+  "beats": 788,
+  "chordEvents": 30,
+  "sections": [
+    "UNKNOWN:0-43",
+    "UNKNOWN:43-127",
+    "UNKNOWN:127-203",
+    "UNKNOWN:203-279",
+    "UNKNOWN:279-353",
+    "UNKNOWN:353-409",
+    "UNKNOWN:409-484",
+    "UNKNOWN:484-577",
+    "UNKNOWN:577-651",
+    "UNKNOWN:651-733",
+    "UNKNOWN:733-787"
+  ],
+  "confidence": {
+    "rhythm": 0.94,
+    "key": 0.9473192095756531,
+    "chord": 1,
+    "overall": 0.9661957628726959
+  },
+  "createdAt": "2026-09-02T17:33:37.332Z"
+}

@@ -1,0 +1,54 @@
+{
+  "metadata": {
+    "title": "Simple Open Chords",
+    "durationMs": 0
+  },
+  "global": {
+    "bpm": 120,
+    "timeSignature": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tuningReferenceHz": 440
+  },
+  "beats": [],
+  "sections": [],
+  "harmony": {
+    "chords": [
+      {
+        "startBeat": 0,
+        "durationBeats": 4,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 4,
+        "durationBeats": 4,
+        "root": "G",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 8,
+        "durationBeats": 4,
+        "root": "A",
+        "quality": "minor",
+        "confidence": 1
+      },
+      {
+        "startBeat": 12,
+        "durationBeats": 4,
+        "root": "F",
+        "quality": "major",
+        "confidence": 1
+      }
+    ]
+  },
+  "motifs": [],
+  "confidence": {
+    "overall": 1
+  },
+  "id": "graph_simple_open",
+  "title": "Simple Open Chords"
+}

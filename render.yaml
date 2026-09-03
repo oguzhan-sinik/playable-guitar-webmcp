@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: guitar-webmcp
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: ALLOW_EXTERNAL_MEDIA_INGEST
+        value: "false"
+      # optional: set to /var/data/guitar when a Render disk is mounted at /var/data
+      # - key: GUITAR_DATA_DIR
+      #   value: /var/data/guitar

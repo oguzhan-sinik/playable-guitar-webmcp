@@ -1,0 +1,209 @@
+{
+  "metadata": {
+    "title": "Mixed Beginner Song",
+    "durationMs": 0
+  },
+  "global": {
+    "bpm": 96,
+    "timeSignature": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tuningReferenceHz": 440
+  },
+  "beats": [],
+  "sections": [
+    {
+      "id": "sec_1",
+      "type": "VERSE",
+      "startBeat": 0,
+      "endBeat": 16,
+      "confidence": 1,
+      "importance": 0.8
+    }
+  ],
+  "harmony": {
+    "chords": [
+      {
+        "startBeat": 0,
+        "durationBeats": 4,
+        "root": "C",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 4,
+        "durationBeats": 4,
+        "root": "G",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 8,
+        "durationBeats": 4,
+        "root": "A",
+        "quality": "minor",
+        "confidence": 1
+      },
+      {
+        "startBeat": 12,
+        "durationBeats": 4,
+        "root": "F",
+        "quality": "major",
+        "confidence": 1
+      }
+    ]
+  },
+  "motifs": [
+    {
+      "id": "motif_1",
+      "sectionId": "sec_1",
+      "type": "MELODY",
+      "eventIds": [
+        "n0",
+        "n1",
+        "n2",
+        "n3"
+      ],
+      "salience": 0.9,
+      "recognizabilityImportance": 0.9
+    }
+  ],
+  "confidence": {
+    "overall": 1
+  },
+  "id": "graph_mixed_beginner",
+  "title": "Mixed Beginner Song",
+  "melody": {
+    "notes": [
+      {
+        "id": "n0",
+        "midi": 65,
+        "startBeat": 0,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.9
+      },
+      {
+        "id": "n1",
+        "midi": 67,
+        "startBeat": 1,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.9
+      },
+      {
+        "id": "n2",
+        "midi": 69,
+        "startBeat": 2,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.9
+      },
+      {
+        "id": "n3",
+        "midi": 67,
+        "startBeat": 3,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.9
+      },
+      {
+        "id": "n4",
+        "midi": 64,
+        "startBeat": 4,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n5",
+        "midi": 67,
+        "startBeat": 5,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n6",
+        "midi": 72,
+        "startBeat": 6,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n7",
+        "midi": 71,
+        "startBeat": 7,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n8",
+        "midi": 69,
+        "startBeat": 8,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n9",
+        "midi": 67,
+        "startBeat": 9,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n10",
+        "midi": 65,
+        "startBeat": 10,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n11",
+        "midi": 64,
+        "startBeat": 11,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n12",
+        "midi": 62,
+        "startBeat": 12,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n13",
+        "midi": 64,
+        "startBeat": 13,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n14",
+        "midi": 67,
+        "startBeat": 14,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      },
+      {
+        "id": "n15",
+        "midi": 65,
+        "startBeat": 15,
+        "durationBeats": 1,
+        "confidence": 1,
+        "salience": 0.3
+      }
+    ]
+  }
+}

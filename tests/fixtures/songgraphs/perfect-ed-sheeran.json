@@ -1,0 +1,255 @@
+{
+  "id": "song_07c596988b8d",
+  "metadata": {
+    "title": "Perfect",
+    "artist": "Ed Sheeran",
+    "durationMs": 281832
+  },
+  "global": {
+    "bpm": 64.2,
+    "timeSignature": {
+      "numerator": 6,
+      "denominator": 8
+    },
+    "key": "Ab major",
+    "tuningReferenceHz": 440
+  },
+  "beats": [],
+  "sections": [
+    {
+      "id": "sec_intro",
+      "type": "INTRO",
+      "startBeat": 0,
+      "endBeat": 15,
+      "confidence": 1,
+      "importance": 0.4
+    },
+    {
+      "id": "sec_verse",
+      "type": "VERSE",
+      "startBeat": 15,
+      "endBeat": 79,
+      "confidence": 1,
+      "importance": 0.6
+    },
+    {
+      "id": "sec_chorus",
+      "type": "CHORUS",
+      "startBeat": 79,
+      "endBeat": 140,
+      "confidence": 1,
+      "importance": 0.9
+    }
+  ],
+  "harmony": {
+    "chords": [
+      {
+        "startBeat": 15,
+        "durationBeats": 13,
+        "root": "G#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 28,
+        "durationBeats": 4,
+        "root": "F",
+        "quality": "minor",
+        "confidence": 1
+      },
+      {
+        "startBeat": 32,
+        "durationBeats": 4,
+        "root": "C#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 36,
+        "durationBeats": 4,
+        "root": "D#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 40,
+        "durationBeats": 4,
+        "root": "G#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 44,
+        "durationBeats": 4,
+        "root": "F",
+        "quality": "minor",
+        "confidence": 1
+      },
+      {
+        "startBeat": 48,
+        "durationBeats": 4,
+        "root": "C#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 52,
+        "durationBeats": 4,
+        "root": "D#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 56,
+        "durationBeats": 4,
+        "root": "G#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 60,
+        "durationBeats": 4,
+        "root": "F",
+        "quality": "minor",
+        "confidence": 1
+      },
+      {
+        "startBeat": 64,
+        "durationBeats": 4,
+        "root": "C#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 68,
+        "durationBeats": 4,
+        "root": "D#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 72,
+        "durationBeats": 4,
+        "root": "G#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 76,
+        "durationBeats": 4,
+        "root": "F",
+        "quality": "minor",
+        "confidence": 1
+      },
+      {
+        "startBeat": 80,
+        "durationBeats": 4,
+        "root": "C#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 84,
+        "durationBeats": 4,
+        "root": "D#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 88,
+        "durationBeats": 4,
+        "root": "G#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 92,
+        "durationBeats": 4,
+        "root": "F",
+        "quality": "minor",
+        "confidence": 1
+      },
+      {
+        "startBeat": 96,
+        "durationBeats": 4,
+        "root": "C#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 100,
+        "durationBeats": 4,
+        "root": "D#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 104,
+        "durationBeats": 4,
+        "root": "G#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 108,
+        "durationBeats": 4,
+        "root": "F",
+        "quality": "minor",
+        "confidence": 1
+      },
+      {
+        "startBeat": 112,
+        "durationBeats": 4,
+        "root": "C#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 116,
+        "durationBeats": 4,
+        "root": "D#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 120,
+        "durationBeats": 4,
+        "root": "G#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 124,
+        "durationBeats": 4,
+        "root": "F",
+        "quality": "minor",
+        "confidence": 1
+      },
+      {
+        "startBeat": 128,
+        "durationBeats": 4,
+        "root": "C#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 132,
+        "durationBeats": 4,
+        "root": "D#",
+        "quality": "major",
+        "confidence": 1
+      },
+      {
+        "startBeat": 136,
+        "durationBeats": 4,
+        "root": "G#",
+        "quality": "major",
+        "confidence": 1
+      }
+    ]
+  },
+  "motifs": [],
+  "confidence": {
+    "overall": 1
+  }
+}
