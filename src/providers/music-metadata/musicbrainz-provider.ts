@@ -8,7 +8,7 @@
  * get re-begun across restarts often enough to matter.
  */
 const MB_BASE = 'https://musicbrainz.org/ws/2';
-const USER_AGENT = 'Playable-Guitar-Studio/1.0 (https://github.com/playable-demo; hackathon demo)';
+const USER_AGENT = 'Playable/0.1 (https://github.com/oguzhan-sinik/playable-guitar-webmcp)';
 const VARIANT_RE = /\b(live|acoustic|remix|remaster(ed)?|demo|instrumental|karaoke|cover|radio edit|single version|extended)\b/i;
 
 export interface MusicBrainzRecording {

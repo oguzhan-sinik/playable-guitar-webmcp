@@ -6,13 +6,6 @@ import { checkFfmpeg, checkFfprobe } from '../../providers/audio/ffmpeg-provider
 import { checkYtDlp } from '../../providers/audio/yt-dlp-provider.js';
 import { EssentiaRuntime } from '../../providers/music-analysis/essentia/essentia-loader.js';
 import { PythonMirWorker } from '../../providers/music-analysis/python/python-worker.js';
-import {
-  llmCredentialsAvailable,
-  resolveAgentModelConfig,
-  resolveGoogleCloudLocation,
-  resolveGoogleCloudProject,
-  resolveModelProvider,
-} from '../../providers/llm/config.js';
 
 interface Check {
   name: string;
@@ -23,7 +16,7 @@ interface Check {
 export function registerDoctorCommand(program: Command): void {
   program
     .command('doctor')
-    .description('Check environment: node, storage, ffmpeg, yt-dlp')
+    .description('Check environment: node, storage, ffmpeg, yt-dlp, MIR providers')
     .action(async () => {
       const checks: Check[] = [];
 
@@ -85,68 +78,6 @@ export function registerDoctorCommand(program: Command): void {
           name: 'Python MIR worker',
           ok: false,
           detail: `${(err as Error).message} (install: cd mir && uv sync)`,
-        });
-      }
-
-      const project = resolveGoogleCloudProject();
-      const location = resolveGoogleCloudLocation();
-      const analysisConfig = resolveAgentModelConfig('analysis');
-      const provider = analysisConfig !== null ? analysisConfig.provider : 'unset';
-
-      checks.push({
-        name: 'Google Cloud project',
-        ok: project !== undefined,
-        detail: project ?? 'set GOOGLE_CLOUD_PROJECT',
-      });
-
-      let adcDetail = 'unknown';
-      let adcOk = false;
-      if (provider === 'google-vertex') {
-        try {
-          const { GoogleAuth } = await import('google-auth-library');
-          const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
-          await auth.getAccessToken();
-          adcOk = true;
-          adcDetail = 'application default credentials';
-        } catch (err) {
-          adcDetail = `ADC unavailable: ${(err as Error).message}`;
-        }
-      } else {
-        adcDetail = 'not required (non-Vertex model)';
-        adcOk = true;
-      }
-      checks.push({ name: 'ADC', ok: adcOk, detail: adcDetail });
-
-      const vertexConfigured =
-        analysisConfig !== null &&
-        analysisConfig.provider === 'google-vertex' &&
-        project !== undefined &&
-        llmCredentialsAvailable(analysisConfig);
-      checks.push({
-        name: 'Vertex AI',
-        ok: vertexConfigured || provider !== 'google-vertex',
-        detail:
-          provider === 'google-vertex'
-            ? vertexConfigured
-              ? 'configured'
-              : 'set GOOGLE_CLOUD_PROJECT + ADC'
-            : `provider: ${provider}`,
-      });
-
-      if (analysisConfig !== null) {
-        checks.push({
-          name: 'Agent model',
-          ok: true,
-          detail: `${analysisConfig.model} (${resolveModelProvider(analysisConfig.model)})`,
-        });
-        if (provider === 'google-vertex') {
-          checks.push({ name: 'Location', ok: true, detail: location });
-        }
-      } else {
-        checks.push({
-          name: 'Agent model',
-          ok: false,
-          detail: 'set LLM_DEFAULT_MODEL',
         });
       }
 

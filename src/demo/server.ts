@@ -1,11 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { readFile, access, writeFile, mkdir, cp } from 'node:fs/promises';
+import { readFile, access, mkdir, cp } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config/env.js';
-import { runSongProcessing } from '../workflows/song-processing/graph.js';
 import { parseSkillLevel } from '../domain/skill/skill-preset.js';
-import type { SongProcessingResult } from '../workflows/song-processing/result.js';
 import {
   loadGraph,
   listSections,
@@ -38,8 +36,6 @@ import { searchLicensedTracks, loadLicensedTrack } from '../providers/licensed-a
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '../..');
-const DEMO_DIR = path.join(ROOT, '.demo');
-const DEMO_RESULT = path.join(DEMO_DIR, 'perfect-result.json');
 const HTML = path.join(ROOT, 'demo', 'index.html');
 const APP_JS = path.join(ROOT, 'demo', 'app.js');
 /** Committed graph-only fixture; seeded into the data dir when absent (no MIR needed). */
@@ -58,15 +54,6 @@ async function seedDemoSong(): Promise<void> {
     return;
   } catch {
     await cp(SEED_DIR, dest, { recursive: true });
-  }
-}
-
-async function loadDemoFallback(): Promise<SongProcessingResult | null> {
-  try {
-    await access(DEMO_RESULT);
-    return JSON.parse(await readFile(DEMO_RESULT, 'utf8')) as SongProcessingResult;
-  } catch {
-    return null;
   }
 }
 
@@ -142,13 +129,7 @@ const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void>
       return;
     }
 
-    if (url === '/api/demo' && req.method === 'GET') {
-      const demo = await loadDemoFallback();
-      json(res, demo ? 200 : 404, demo ?? { error: 'No demo artifact' });
-      return;
-    }
-
-    // --- deterministic WebMCP-backed API (no Gemini agents) ---
+    // --- deterministic WebMCP-backed API (no LLM anywhere) ---
 
     if (url === '/api/state' && req.method === 'GET') {
       const songId = new URL(req.url ?? '/', 'http://x').searchParams.get('songId') ?? DEFAULT_SONG;
@@ -335,31 +316,6 @@ const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void>
           typeof profile === 'string' ? (JSON.parse(profile) as PlayerProfileInput) : (profile as PlayerProfileInput | undefined),
         ),
       });
-      return;
-    }
-
-    if (url === '/api/process' && req.method === 'POST') {
-      // Legacy autonomous-agent path (Gemini + LangGraph). Kept for the CLI
-      // workflow; the WebMCP path uses the deterministic endpoints above.
-      const body = await readBody(req);
-      const songId = typeof body.songId === 'string' ? body.songId : DEFAULT_SONG;
-      const skillLevel = parseSkillLevel(typeof body.level === 'string' ? body.level : undefined);
-      try {
-        const result = await runSongProcessing(songId, { skillLevel });
-        if (songId === DEFAULT_SONG && result.status === 'COMPLETED') {
-          await mkdir(DEMO_DIR, { recursive: true });
-          await writeFile(DEMO_RESULT, JSON.stringify(result, null, 2) + '\n');
-        }
-        json(res, 200, result);
-      } catch (err) {
-        const fallback = await loadDemoFallback();
-        if (fallback !== null) {
-          res.writeHead(200, { 'Content-Type': 'application/json', 'X-Demo-Fallback': 'true' });
-          res.end(JSON.stringify({ ...fallback, _demoFallback: true }));
-          return;
-        }
-        json(res, 500, { error: (err as Error).message });
-      }
       return;
     }
 
