@@ -23,7 +23,7 @@ export const compileSchema: Record<string, unknown> = {
     preferredTempoFactor: { type: 'number', description: 'Practice tempo factor between 0.5 and 1.0.' },
     prioritizeFidelity: { type: 'boolean', description: 'Keep the song as intact as possible even if harder.' },
   },
-  required: ['level'],
+  // level is optional: defaults to the selected level (BEGINNER when nothing is known)
 };
 
 export const playerProfileSchema: Record<string, unknown> = {

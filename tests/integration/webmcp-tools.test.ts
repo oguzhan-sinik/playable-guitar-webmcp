@@ -57,8 +57,8 @@ function toolFor(name: string): RegisteredTool {
 }
 
 describe('webmcp tool schemas', () => {
-  it('compile requires level with the three skill values', () => {
-    expect(compileSchema.required).toEqual(['level']);
+  it('compile level is optional with the three skill values', () => {
+    expect(compileSchema.required).toBeUndefined();
     const level = (compileSchema.properties as Record<string, { enum?: string[] }>).level;
     expect(level?.enum).toEqual(SKILL_LEVELS);
   });
@@ -207,10 +207,12 @@ describe('webmcp registration', () => {
     expect(state.level).toBe('INTERMEDIATE');
   });
 
-  it('compile tool rejects a missing level', async () => {
+  it('compile tool accepts a missing level (safe default) and reports state-aware errors', async () => {
     mockModelContext();
     await registerWebMcpTools();
-    await expect(toolFor('compile_guitar_version').execute({})).rejects.toThrow(/level is required/);
+    // no compilable song loaded → structured guidance instead of a dead-end throw
+    const result = (await toolFor('compile_guitar_version').execute({})) as { error?: string };
+    expect(result.error).toBe('SONG_NOT_COMPILABLE');
   });
 
   it('load_song_from_link updates shared state and reports capability', async () => {
@@ -463,21 +465,34 @@ describe('NO-LINK HERO FLOW (request by name → research → resolve → compil
     });
     expect(state.playerProfile).not.toBeNull();
 
-    // 2. research brief identifies missing facts
+    // 2. research brief identifies missing facts as an agent-actionable work queue
     const brief = (await toolFor('get_song_research_brief').execute({})) as {
       song: { title: string };
       status: string;
-      priorityGaps: Array<{ field: string }>;
+      readyToCompile: boolean;
+      priorityTasks: Array<{ field: string; instruction: string; suggestedQueries: string[] }>;
     };
     expect(brief.song.title).toBe('City Lights');
-    expect(brief.priorityGaps.some((g) => g.field === 'harmony')).toBe(true);
+    expect(brief.readyToCompile).toBe(false);
+    expect(brief.priorityTasks.some((t) => t.field === 'harmony' && t.suggestedQueries.length > 0)).toBe(true);
+
+    // compiling NOW must return a structured, agent-actionable error — not a dead end
+    const tooEarly = (await toolFor('compile_guitar_version').execute({})) as {
+      error: string;
+      nextSuggestedTools: Array<{ name: string }>;
+    };
+    expect(tooEarly.error).toBe('SONG_NOT_COMPILABLE');
+    expect(tooEarly.nextSuggestedTools.some((t) => t.name === 'get_song_research_brief')).toBe(true);
 
     // 3. batched evidence from independent sources (synthetic fixture)
-    await toolFor('submit_song_evidence').execute({
+    const evidence1 = (await toolFor('submit_song_evidence').execute({
       sourceUrl: 'https://encyclopedia.example/city-lights',
       sourceKind: 'MUSIC_DATABASE',
       claims: [{ claimType: 'IDENTITY', value: { title: 'City Lights', artist } }],
-    });
+    })) as { accepted: boolean; researchStatus: string; nextSuggestedTools: Array<{ name: string }> };
+    expect(evidence1.accepted).toBe(true);
+    expect(evidence1.researchStatus).toBe('NEEDS_MORE_EVIDENCE');
+    expect(evidence1.nextSuggestedTools.some((t) => t.name === 'get_song_research_brief')).toBe(true);
     await toolFor('submit_song_evidence').execute({
       sourceUrl: 'https://chords-fan.example/city-lights',
       sourceKind: 'CHORD_RESOURCE',
@@ -514,28 +529,47 @@ describe('NO-LINK HERO FLOW (request by name → research → resolve → compil
       resolved: boolean;
       origin: string;
       songId: string;
+      nextSuggestedTools: Array<{ name: string }>;
     };
     expect(resolved.resolved).toBe(true);
     expect(resolved.origin).toBe('RESEARCH_FUSION');
     expect(state.songId).toBe(resolved.songId);
+    // profile was set before resolve → the agent is guided to compare/compile, not re-ask
+    expect(resolved.nextSuggestedTools.some((t) => t.name === 'compile_guitar_version')).toBe(true);
 
     const compiled = (await toolFor('compile_guitar_version').execute({ level: 'BEGINNER', avoidBarreChords: true })) as {
+      compiled: boolean;
       capo: number;
       chords: string[];
       playerDifficulty: number;
       fidelity: number;
+      nextSuggestedTools: Array<{ name: string }>;
     };
+    expect(compiled.compiled).toBe(true);
     expect(compiled.playerDifficulty).toBeGreaterThan(0);
     expect(compiled.fidelity).toBeGreaterThan(0.5);
+    expect(compiled.nextSuggestedTools.some((t) => t.name === 'get_arrangement_diagnostics')).toBe(true);
     expect(state.playerProfile).not.toBeNull(); // profile still intact after the full flow
 
-    // 6. teaching flow
-    const section = (await toolFor('choose_learning_section').execute({ section: 'CHORUS' })) as { section: string };
+    // 6. teaching flow — each step hands the agent the next one
+    const section = (await toolFor('choose_learning_section').execute({ section: 'CHORUS' })) as {
+      section: string;
+      nextSuggestedTools: Array<{ name: string }>;
+    };
     expect(section.section).toBe('CHORUS');
+    expect(section.nextSuggestedTools[0]!.name).toBe('create_practice_plan');
+    const plan = (await toolFor('create_practice_plan').execute({})) as {
+      defaultApplied: boolean;
+      nextSuggestedTools: Array<{ name: string }>;
+    };
+    expect(plan.defaultApplied).toBe(true); // missing-time default, transparent
+    expect(plan.nextSuggestedTools[0]!.name).toBe('configure_practice_session');
     const session = (await toolFor('configure_practice_session').execute({ minutes: 20, loop: true, metronome: true })) as {
       totalMinutes: number;
+      nextSuggestedTools: Array<{ name: string }>;
     };
     expect(session.totalMinutes).toBe(20);
+    expect(session.nextSuggestedTools[0]!.name).toBe('prepare_practice_preview');
     const preview = (await toolFor('prepare_practice_preview').execute({})) as { ready: boolean; playedByHuman: boolean };
     expect(preview.ready).toBe(true);
     expect(preview.playedByHuman).toBe(true); // no autoplay — the human presses Play

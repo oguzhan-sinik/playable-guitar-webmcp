@@ -33,6 +33,18 @@ describe('song request domain', () => {
   it('rejects an empty request', () => {
     expect(() => createSongRequest({})).toThrow(/at least a song title/);
   });
+
+  it('a title-only request returns IDENTITY_NEEDS_CONFIRMATION instead of guessing the artist', async () => {
+    const dataDir = path.join(await mkdtemp(path.join(tmpdir(), 'req-')), 'data');
+    const result = await requestSong(
+      { title: 'Perfect' },
+      { dataDir, fetchFn: (async (): Promise<Response> => { throw new Error('offline'); }) as typeof fetch },
+    );
+    if (!('status' in result) || result.status !== 'IDENTITY_NEEDS_CONFIRMATION') throw new Error('expected confirmation state');
+    expect(result.researchNeeded).toBe(true);
+    expect(result.request.identity.artist).toBe('');
+    expect(result.message).toMatch(/Perfect/);
+  });
 });
 
 describe('batch evidence (one source, one call)', () => {
@@ -148,11 +160,17 @@ describe('no-link research projections', () => {
   it('requestSong reuses the session for the same recording and exposes a brief', async () => {
     const dataDir = path.join(await mkdtemp(path.join(tmpdir(), 'req-')), 'data');
     const deps = { dataDir, fetchFn: (async (): Promise<Response> => { throw new Error('offline'); }) as typeof fetch };
-    const first = await requestSong({ query: 'Night Drive by The Analog Hearts' }, deps);
+    const first = (await requestSong({ query: 'Night Drive by The Analog Hearts' }, deps)) as Extract<
+      Awaited<ReturnType<typeof requestSong>>,
+      { brief: Record<string, unknown> }
+    >;
     expect(first.brief.status).toBe('RESEARCHING');
     expect((first.brief.understanding as { identity: number }).identity).toBeGreaterThan(0);
 
-    const again = await requestSong({ title: 'Night Drive', artist: 'The Analog Hearts' }, deps);
+    const again = (await requestSong({ title: 'Night Drive', artist: 'The Analog Hearts' }, deps)) as Extract<
+      Awaited<ReturnType<typeof requestSong>>,
+      { reused: boolean }
+    >;
     expect(again.reused).toBe(true);
     expect(again.request.identity.title).toBe('Night Drive');
 

@@ -78,6 +78,8 @@ export interface PracticeConfig {
   metronome: boolean;
   countInBars: number;
   minutes: number;
+  /** True when the caller did not specify minutes and a sensible default was applied. */
+  defaultApplied?: boolean;
 }
 
 /** What the studio needs to synthesize + display the practice preview. */
@@ -180,6 +182,16 @@ export interface AppState {
   preview: PreviewInfo | null;
   diagnostics: (PlayerDifficultyScore & { capo: number; chords: string[]; effectiveBpm: number; knownChords: string[]; unfamiliarChords: string[]; barreChords: string[] }) | null;
   research: ResearchStatus | null;
+  /** High-level learning intent captured from profile/practice tool calls. */
+  learningGoal: LearningGoalContext;
+}
+
+export interface LearningGoalContext {
+  skillPreset?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  avoidBarreChords?: boolean;
+  practiceMinutes?: number;
+  prioritizeRecognizability?: boolean;
+  preferredSection?: string;
 }
 
 export const state: AppState = {
@@ -203,6 +215,7 @@ export const state: AppState = {
   preview: null,
   diagnostics: null,
   research: null,
+  learningGoal: {},
 };
 
 type Listener = () => void;
@@ -481,6 +494,15 @@ export function setPlayerProfile(input: PlayerProfileInput): PlayerProfile {
       ? `Agent learned your skills: knows ${known.slice(0, 5).join(', ')}${!merged.barreChords.comfortable ? ', no barre chords yet' : ''}`
       : `Agent updated your player profile`,
   );
+  // remember the goal context so later tools can act on it
+  setState({
+    learningGoal: {
+      ...state.learningGoal,
+      ...(merged.preset !== undefined && { skillPreset: merged.preset }),
+      ...(merged.practicePreferences.avoidBarreChords && { avoidBarreChords: true }),
+      ...(merged.practicePreferences.prioritizeRecognizability === true && { prioritizeRecognizability: true }),
+    },
+  });
   return merged;
 }
 
@@ -530,8 +552,16 @@ export function configurePractice(input: PracticeConfigInput): PracticeConfig {
   if (input.countInBars !== undefined) patch.countInBars = Math.min(2, Math.max(0, Math.round(input.countInBars)));
   if (input.minutes !== undefined) patch.minutes = Math.min(60, Math.max(5, Math.round(input.minutes)));
   setState({ practice: { ...state.practice, ...patch }, preview: null });
+  // track goal context + whether the session length was an assumed default
+  setState({
+    learningGoal: {
+      ...state.learningGoal,
+      ...(patch.minutes !== undefined && { practiceMinutes: patch.minutes }),
+      ...(patch.section !== undefined && patch.section !== null && { preferredSection: patch.section }),
+    },
+  });
   logActivity(practiceActivityLine(patch));
-  return state.practice;
+  return { ...state.practice, defaultApplied: input.minutes === undefined };
 }
 
 function practiceActivityLine(patch: Partial<PracticeConfig>): string {
@@ -604,14 +634,24 @@ export async function requestSong(input: {
   title?: string;
   artist?: string;
   version?: string;
-}): Promise<{ title: string; artist: string; reused: boolean; research: ResearchStatus }> {
+}): Promise<{ title: string; artist: string; reused: boolean; status?: string; research: ResearchStatus | null }> {
   const data = await api<{
     request: { identity: { title: string; artist: string } };
-    reused: boolean;
-    brief: Record<string, unknown>;
+    reused?: boolean;
+    status?: string;
+    message?: string;
+    brief?: Record<string, unknown>;
     musicBrainz?: { recordingId: string; title: string; artist: string; ambiguous: boolean } | null;
   }>('/api/song/request', input);
-  const brief = data.brief as {
+
+  // ambiguous title-only request: present it, start nothing
+  if (data.status === 'IDENTITY_NEEDS_CONFIRMATION') {
+    setState({ title: data.request.identity.title, analysis: null, sections: [], currentSection: null, arrangement: null, explanation: null, plan: null, session: null, preview: null, diagnostics: null, loadedSource: null, research: null });
+    logActivity(`Agent asked about “${data.request.identity.title}” — recording identity needs confirmation`);
+    return { title: data.request.identity.title, artist: '', reused: false, status: data.status, research: null };
+  }
+
+  const brief = (data.brief ?? {}) as {
     status?: string | undefined;
     understanding?: Record<string, number> | undefined;
     independentSources?: number | undefined;
@@ -665,8 +705,8 @@ export async function requestSong(input: {
   return {
     title: data.request.identity.title,
     artist: data.request.identity.artist,
-    reused: data.reused,
-    research: state.research!,
+    reused: data.reused === true,
+    research: state.research,
   };
 }
 

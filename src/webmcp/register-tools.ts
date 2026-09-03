@@ -117,12 +117,12 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'request_song',
     description:
-      'Use this when the user NAMES a song they want to learn instead of providing a URL. This establishes song identity intent only — it does NOT claim the musical structure has been analyzed. After calling it, inspect get_song_research_brief and research compact public musical facts (identity, key, tempo, meter, harmony, form) across multiple independent sources before submitting evidence or resolving. A Spotify/YouTube link is NOT required.',
+      'START HERE when the user asks to learn a song by name (title/artist), e.g. "Teach me Perfect by Ed Sheeran". This selects the requested recording and begins the song-understanding workflow. No Spotify, YouTube or audio link is needed — do not ask the user for one. After this call, follow nextSuggestedTools: usually get_song_research_brief next, because a named song must be researched and verified from independent public sources before it can be compiled into a guitar arrangement.',
     inputSchema: {
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Song title, e.g. "Perfect".' },
-        artist: { type: 'string', description: 'Artist name, e.g. "Ed Sheeran".' },
+        artist: { type: 'string', description: 'Artist name, e.g. "Ed Sheeran". Strongly recommended — a title-only request is ambiguous and returns IDENTITY_NEEDS_CONFIRMATION.' },
         query: { type: 'string', description: 'Free text like "Perfect by Ed Sheeran" when title/artist are not separated.' },
         version: { type: 'string', description: 'Optional: studio, live, acoustic, remix — prevents mixing recordings.' },
       },
@@ -134,15 +134,33 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         ...(typeof input.query === 'string' && input.query.trim().length > 0 && { query: input.query.trim() }),
         ...(typeof input.version === 'string' && input.version.trim().length > 0 && { version: input.version.trim() }),
       });
+      // ambiguous title-only request — the agent should identify the recording
+      // (web search) or ask one concise question, then call request_song again
+      if (result.status === 'IDENTITY_NEEDS_CONFIRMATION') {
+        return {
+          status: result.status,
+          query: result.title,
+          message: `Several recordings may match "${result.title}".`,
+          researchNeeded: true,
+          nextSuggestedTools: [
+            {
+              name: 'request_song',
+              reason: 'Call again with the artist filled in once you have identified the intended recording (use web search on "<title> song artist" or ask the user one concise question).',
+              priority: 'HIGH',
+            },
+          ],
+        };
+      }
       return {
         requested: true,
         reusedExistingResearch: result.reused,
         song: { title: result.title, artist: result.artist },
-        status: result.research.status,
+        status: result.research?.status,
         nextSuggestedTools: [
           {
             name: 'get_song_research_brief',
-            reason: 'The song has been selected but no verified harmony exists yet — inspect what musical facts are missing.',
+            reason: 'The recording is selected but no verified musical structure exists yet — inspect what musical facts are missing before compiling.',
+            priority: 'HIGH',
           },
         ],
       };
@@ -152,7 +170,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'load_song_from_link',
     description:
-      'OPTIONAL alternative to request_song: load a song from a YouTube, Spotify, or direct-audio URL when the user supplies a link. Determines whether the source can be analyzed or is metadata/playback only, loads it into shared UI state, and returns the next actions. For a song the user only NAMES, prefer request_song.',
+      'Use ONLY when the user actually provides a Spotify, YouTube, or direct-audio URL. Do not ask the user for a link if they have merely NAMED a song — use request_song instead. Determines whether the source can be analyzed or is metadata/playback only, loads it into shared UI state, and returns the next actions.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -198,14 +216,16 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'get_guitar_app_state',
     description:
-      'Get the currently loaded song, selected guitarist level, player profile, current arrangement, practice configuration, and preview readiness. Use this before deciding what guitar-learning action to take.',
+      "Snapshot of the whole application: current song, player profile, research status, arrangement, and practice readiness. Useful for orienting at any point. WORKFLOW this app is designed for (the tools guide you step by step via nextSuggestedTools — prefer them over this list): (1) request_song for a named song, (2) get_song_research_brief, (3) research the missing facts on the public web, (4) submit_song_evidence per independent source, (5) resolve_researched_song, (6) set_player_profile if the user's ability is known, (7) compile_guitar_version, (8) get_arrangement_diagnostics, (9) choose_learning_section, (10) configure_practice_session, (11) prepare_practice_preview — a human then presses Play.",
     inputSchema: emptySchema,
     annotations: READ_ONLY,
     execute: async () => ({
       song: { id: state.songId, title: state.title },
       selectedLevel: state.level,
+      learningGoal: state.learningGoal,
       playerProfileSet: state.playerProfile !== null,
       playerProfile: getPlayerProfile(),
+      researchActive: state.research !== null,
       analysisAvailable: state.analysis !== null,
       analysis: state.analysis,
       arrangementAvailable: state.arrangement !== null,
@@ -220,7 +240,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'analyze_song',
     description:
-      "Analyze the current song's musical structure for guitar learning. Returns tempo, meter, key, chord summary, song sections, and analysis confidence.",
+      'Run audio analysis on the current song. Use ONLY when the app already holds analyzable audio (a loaded YouTube/direct-audio/licensed track). Do NOT use this to research a song the user merely named — for a title-only request use request_song, which starts evidence-based research instead.',
     inputSchema: analyzeSongSchema,
     execute: async () => analyzeSong(),
   });
@@ -237,22 +257,46 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'compile_guitar_version',
     description:
-      'Compile the current song into a playable guitar arrangement for a specified skill level, honoring the player profile plus optional constraints. The compiler preserves musical fidelity while reducing physical guitar difficulty using capo selection, chord-shape optimization, rhythm simplification, tempo adaptation, and other deterministic transformations. Returns constraintsSatisfied=false with the closest available version when the constraints cannot be met.',
+      'Compile the current song into a playable guitar arrangement for a skill level, honoring the player profile plus optional constraints. Requires a RESOLVED song — on a named-but-unresearched song, request_song + evidence + resolve_researched_song come first. level is optional: it defaults to the selected level (BEGINNER when nothing else is known). The compiler preserves musical fidelity while reducing physical difficulty via capo selection, chord-shape optimization, rhythm simplification and tempo adaptation; constraintsSatisfied=false means the closest available version was returned honestly.',
     inputSchema: compileSchema,
     execute: async (input) => {
-      if (typeof input.level !== 'string') throw new Error('level is required.');
-      const level = requireLevel(input.level, state.level);
+      if (state.songId.length === 0) {
+        return {
+          error: 'SONG_NOT_COMPILABLE',
+          message: 'No song is loaded. A named song must be requested and resolved before it can be compiled.',
+          nextSuggestedTools: [
+            { name: 'request_song', reason: 'Select the song the user wants to learn.', priority: 'HIGH' },
+            { name: 'get_song_research_brief', reason: 'If a song was already requested, continue its research.', priority: 'HIGH' },
+          ],
+        };
+      }
+      const levelGiven = typeof input.level === 'string' && input.level.trim().length > 0;
+      const level = requireLevel(levelGiven ? input.level : state.level, state.level);
       const avoidBarreChords = input.avoidBarreChords === true || (state.playerProfile?.practicePreferences.avoidBarreChords ?? false);
       const constraints: CompileConstraints = {};
       if (typeof input.maxDifficulty === 'number') constraints.maxDifficulty = input.maxDifficulty;
       if (typeof input.maxCapo === 'number') constraints.maxCapo = Math.round(input.maxCapo);
       if (typeof input.preferredTempoFactor === 'number') constraints.preferredTempoFactor = input.preferredTempoFactor;
       if (input.prioritizeFidelity === true) constraints.prioritizeFidelity = true;
-      const compiled = await compileVersion(level, avoidBarreChords, constraints);
+      let compiled;
+      try {
+        compiled = await compileVersion(level, avoidBarreChords, constraints);
+      } catch (err) {
+        // state-aware error: never dead-end the agent
+        return {
+          error: 'SONG_NOT_COMPILABLE',
+          message: `The current song cannot be compiled yet: ${err instanceof Error ? err.message : String(err)}`,
+          nextSuggestedTools: [
+            { name: 'get_guitar_app_state', reason: 'Check whether a song is loaded and whether it is resolved.', priority: 'HIGH' },
+            { name: 'get_song_research_brief', reason: 'If the song was requested by name, inspect the remaining research work.', priority: 'HIGH' },
+          ],
+        };
+      }
       if (typeof input.section === 'string' && input.section.trim().length > 0) {
         chooseSection(input.section);
       }
       return {
+        compiled: true,
         level: compiled.level,
         capo: compiled.capo,
         chords: compiled.chords,
@@ -261,8 +305,18 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         fidelity: compiled.fidelity,
         tempoFactor: compiled.tempoFactor,
         constraintsSatisfied: compiled.constraintsSatisfied,
+        ...(state.playerProfile === null && {
+          assumption: `No detailed player profile was provided — compiled for a safe ${level} default. Call set_player_profile (even just {"preset":"BEGINNER"}) for a personalized version.`,
+        }),
         tradeoffs: compiled.changes.slice(0, 5),
         ladder: compiled.ladder.map((l) => ({ level: l.level, capo: l.capo, difficulty: l.difficulty, playerDifficulty: l.playerDifficulty, fidelity: l.fidelity })),
+        nextSuggestedTools: [
+          { name: 'get_arrangement_diagnostics', reason: 'Check whether this version still contains difficult elements for this player.', priority: 'MEDIUM' },
+          { name: 'choose_learning_section', reason: 'Select the most recognizable section for the player to start with.', priority: 'MEDIUM' },
+          ...(state.playerProfile === null
+            ? [{ name: 'set_player_profile', reason: 'The player profile is unknown — a preset like {"preset":"BEGINNER"} personalizes difficulty.', priority: 'MEDIUM' }]
+            : []),
+        ],
       };
     },
   });
@@ -279,16 +333,44 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'get_arrangement_diagnostics',
     description:
-      'Inspect why the current arrangement is easy or difficult for this specific guitarist. Returns unfamiliar chords, barre usage, difficult transitions, tempo pressure, and the main contributors to player difficulty. Use after compiling to decide whether to compile again with stronger constraints.',
+      'Inspect why the current arrangement is easy or difficult for THIS guitarist: unfamiliar chords, barre usage, tempo pressure, difficulty contributors. Call after compile_guitar_version — if a recompile would help, the result says so with concrete recommended constraints.',
     inputSchema: emptySchema,
     annotations: READ_ONLY,
-    execute: async () => getArrangementDiagnostics(),
+    execute: async () => {
+      const result = await getArrangementDiagnostics();
+      const barrePenalty = result.barreChords.length > 0 ? Math.round(1.4 * result.barreChords.length * 10) / 10 : 0;
+      const avoidBarre = state.playerProfile?.practicePreferences.avoidBarreChords === true;
+      const recompile = (avoidBarre && result.barreChords.length > 0) || result.playerDifficulty > 5;
+      const constraints: Record<string, unknown> = {
+        ...(result.barreChords.length > 0 ? { avoidBarreChords: true } : {}),
+        ...(result.effectiveBpm > 90 ? { preferredTempoFactor: 0.7 } : {}),
+      };
+      return {
+        ...result,
+        barrePenalty,
+        constraintsSatisfied: !recompile,
+        recommendation: { recompile, ...(recompile && { constraints }) },
+        nextSuggestedTools: recompile
+          ? [
+              {
+                name: 'compile_guitar_version',
+                reason: `Recompile with the recommended constraints (${Object.entries(constraints)
+                  .map(([k, v]) => `${k}: ${String(v)}`)
+                  .join(', ')}) for an easier faithful version.`,
+                priority: 'HIGH' as const,
+              },
+            ]
+          : [
+              { name: 'choose_learning_section', reason: 'Difficulty looks comfortable — pick the best section to start with.', priority: 'MEDIUM' as const },
+            ],
+      };
+    },
   });
 
   await register({
     name: 'choose_learning_section',
     description:
-      'Choose a section of the current song for the guitarist to practice. Use this when the user wants to start with the chorus, verse, bridge, or another recognizable section.',
+      'Choose the song section to practice first — the chorus is usually the most recognizable. Requires a compiled arrangement. Continue the chain afterwards with create_practice_plan.',
     inputSchema: sectionSchema,
     execute: async (input) => {
       const name = requireString(input.section, 'section');
@@ -297,6 +379,9 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         section: section.type,
         startSeconds: Math.round(section.startMs / 1000),
         endSeconds: Math.round(section.endMs / 1000),
+        nextSuggestedTools: [
+          { name: 'create_practice_plan', reason: `Build a practice plan around the ${section.type.toLowerCase()}.`, priority: 'HIGH' },
+        ],
       };
     },
   });
@@ -304,14 +389,21 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'create_practice_plan',
     description:
-      "Create a short guitar practice plan for the current arrangement and selected song section. Uses the player's skill level, chord difficulty, chord transitions, tempo, and song structure.",
+      "Create a short practice plan for the current arrangement and selected section, sized to the player's available minutes (defaults to 20 when unspecified — flagged as defaultApplied). Continue the chain afterwards with configure_practice_session.",
     inputSchema: planSchema,
     execute: async (input) => {
       const minutes =
         typeof input.minutes === 'number' && Number.isInteger(input.minutes) && input.minutes >= 5 && input.minutes <= 60
           ? input.minutes
           : undefined;
-      return createPlan(minutes);
+      const plan = await createPlan(minutes);
+      return {
+        ...plan,
+        ...(minutes === undefined && { defaultApplied: true, assumedMinutes: 20 }),
+        nextSuggestedTools: [
+          { name: 'configure_practice_session', reason: 'Configure the Practice Studio (section, tempo, loop, metronome) for this plan.', priority: 'HIGH' },
+        ],
+      };
     },
   });
 
@@ -326,7 +418,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'set_player_profile',
     description:
-      'Set detailed information about the guitarist’s current abilities and physical/practice preferences. Use this when the player explains which chords they know, whether barre chords are difficult, what tempo feels comfortable, or what guitar techniques they can perform. A detailed profile overrides the coarse skill level.',
+      'Set who is playing, any time before or during the workflow. Minimal form: {"preset":"BEGINNER"} — sensible defaults (barre chords uncomfortable, slower tempo allowed) are applied, so "complete beginner" or "never played" maps to preset BEGINNER without 15 fields. Richer form: knownChords ["G","C","D"], barreChordsComfortable false, comfortableTempoBpm, practicePreferences. Works whether or not a song is loaded; the profile survives song changes.',
     inputSchema: playerProfileSchema,
     execute: async (input) => {
       const profileInput: Record<string, unknown> = {};
@@ -373,7 +465,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'configure_practice_session',
     description:
-      'Configure the Practice Studio: which section to practice, practice tempo (pitch unchanged), loop, metronome, count-in, and session length. The visible studio controls move with this call.',
+      'Configure the Practice Studio: section, practice tempo (pitch unchanged), loop, metronome, count-in, and session length. All fields optional — session length defaults to 20 minutes (defaultApplied marks the assumption). The visible studio controls move with this call. Afterwards, prepare_practice_preview renders the audio (a human presses Play).',
     inputSchema: practiceConfigSchema,
     execute: async (input) => {
       const configInput: Record<string, unknown> = {};
@@ -389,6 +481,10 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         practice,
         sessionSteps: session.steps.map((s) => ({ instruction: s.instruction, minutes: s.minutes })),
         totalMinutes: session.steps.reduce((sum, s) => sum + s.minutes, 0),
+        defaultApplied: practice.defaultApplied === true,
+        nextSuggestedTools: [
+          { name: 'prepare_practice_preview', reason: 'Render the synthesized preview of exactly this arrangement — then tell the human to press Play.', priority: 'HIGH' },
+        ],
       };
     },
   });
@@ -412,7 +508,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         durationSeconds: info.durationSec,
         chords: info.chords,
         playedByHuman: true,
-        note: 'Ready in the Practice Studio. The human presses Play to hear it.',
+        note: 'READY. The preview never autoplays — tell the human to press the Play button in the Practice Studio.',
       };
     },
   });
@@ -422,7 +518,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'begin_song_research',
     description:
-      'Begin evidence-based musical research for the currently loaded song when analyzable audio is unavailable or incomplete. Returns the song identity, facts already known, evidence gaps, and suggested web research queries. Use your browser/web research capability to investigate the requested facts across multiple independent public sources, then submit only compact musical facts through submit_song_evidence. Use public accessible sources only; do not bypass login gates or paywalls; do not reproduce full tabs, lyrics, or proprietary sheet music.',
+      'Legacy research entry point — for a named song prefer request_song, then get_song_research_brief. This only (re)starts the research session itself. Rules for all research: use public accessible sources only; do not bypass login gates or paywalls; do not reproduce full tabs, lyrics, or proprietary sheet music; submit compact facts via submit_song_evidence.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -447,7 +543,10 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         suggestedQueries: result.suggestedQueries,
         conflicts: result.conflicts,
         musicBrainz: result.musicBrainz,
-        nextSuggestedTools: ['submit_song_evidence', 'get_song_research_status'],
+        nextSuggestedTools: [
+          { name: 'submit_song_evidence', reason: 'Submit compact facts from each independent public source you research.', priority: 'HIGH' },
+          { name: 'get_song_research_brief', reason: 'Inspect ranked gaps and suggested queries.', priority: 'MEDIUM' },
+        ],
       };
     },
   });
@@ -504,19 +603,23 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
     },
     execute: async (input) => {
       const result = await submitSongEvidence(input as never);
+      const ready = result.status === 'READY' || result.status === 'READY_WITH_WARNINGS';
       return {
-        added: result.added,
+        accepted: result.added,
         addedCount: result.addedCount,
-        status: result.status,
-        sources: result.sources,
-        independentDomains: result.independentDomains,
+        researchStatus: result.status,
+        independentSources: result.independentDomains,
         confidence: result.confidence,
-        conflicts: result.conflicts,
+        newConflicts: result.conflicts ?? [],
         gaps: result.gaps,
         suggestedQueries: result.suggestedQueries,
-        nextSuggestedTools: [
-          { name: 'get_song_research_brief', reason: 'Inspect what musical facts are still missing before resolving.' },
-        ],
+        nextSuggestedTools: ready
+          ? [
+              { name: 'validate_song_blueprint', reason: 'Evidence is now sufficient to test whether the song can be resolved.', priority: 'HIGH' },
+            ]
+          : [
+              { name: 'get_song_research_brief', reason: 'Re-check what is still missing or conflicting before resolving.', priority: 'HIGH' },
+            ],
       };
     },
   });
@@ -524,7 +627,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'get_song_research_status',
     description:
-      'Get the current research status: readiness state, per-field confidence (identity, key, tempo, meter, harmony, structure), independent source count, open conflicts, and evidence gaps. Use this after submitting evidence to decide whether to research more or resolve.',
+      'Raw research snapshot: readiness state, per-field confidence, independent source count, open conflicts, and the evidence list with domains. For deciding WHAT TO DO NEXT prefer get_song_research_brief — it ranks the missing facts and provides search queries.',
     inputSchema: emptySchema,
     annotations: READ_ONLY,
     execute: async () => {
@@ -548,20 +651,37 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'get_song_research_brief',
     description:
-      'Inspect what musical information is still needed for the current song. Call this after request_song and again after submitting evidence. The result contains confidence, unresolved conflicts, evidence gaps, and suggested public-web search queries. Do not invent missing facts. Use external web research to find compact public musical facts, then submit those facts using submit_song_evidence.',
+      'The work queue for the current song: what musical facts are still missing, with ready-made public-web search queries (priorityTasks), unresolved conflicts, and per-field confidence. Call it after request_song and again after every submit_song_evidence. Do the web research it asks for, then submit what you find with submit_song_evidence. Do not invent missing facts.',
     inputSchema: emptySchema,
     annotations: READ_ONLY,
     execute: async () => {
       const payload = await fetchResearchBrief();
       const brief = (payload as { brief?: Record<string, unknown> }).brief ?? payload;
+      if ((payload as { active?: boolean }).active === false || brief === null || brief === undefined) {
+        return {
+          error: 'NO_SONG_REQUESTED',
+          message: 'No song is selected yet — nothing to research.',
+          nextSuggestedTools: [
+            { name: 'request_song', reason: 'Request the song by title and artist to start the research workflow.', priority: 'HIGH' },
+          ],
+        };
+      }
+      const ready = brief.readyToCompile === true;
       return {
         ...brief,
-        nextSuggestedTools: [
-          { name: 'submit_song_evidence', reason: 'Submit compact facts from independent public sources you have researched.' },
-          ...(brief.status === 'READY' || brief.status === 'READY_WITH_WARNINGS'
-            ? [{ name: 'resolve_song_blueprint', reason: 'Enough independent evidence exists to resolve an honest blueprint.' }]
-            : []),
-        ],
+        nextSuggestedTools: ready
+          ? [
+              { name: 'validate_song_blueprint', reason: 'Evidence is sufficient — confirm the blueprint resolves honestly.', priority: 'HIGH' },
+            ]
+          : [
+              {
+                name: 'submit_song_evidence',
+                reason:
+                  (brief as { priorityTasks?: Array<{ instruction?: string }> }).priorityTasks?.[0]?.instruction ??
+                  'Research the priorityTasks on the public web and submit compact facts, one call per independent source.',
+                priority: 'HIGH',
+              },
+            ],
       };
     },
   });
@@ -587,7 +707,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'resolve_researched_song',
     description:
-      'Resolve the accumulated independent musical evidence (the Song Blueprint) into a provenance-rich SongGraph when confidence is sufficient. Operates ONLY on already-submitted evidence — it cannot invent musical structure. Do not call this if validate_song_blueprint or get_song_research_status still reports a high-priority gap unless the user explicitly accepts a lower-confidence arrangement. On success the song becomes fully analyzable state: compile/practice tools work on it immediately.',
+      'Resolve the accumulated independent musical evidence (the Song Blueprint) into a playable SongGraph. Operates ONLY on already-submitted evidence — it cannot invent musical structure. Call it once evidence is sufficient (submit_song_evidence points here when ready); on failure it tells you exactly what is missing. On success, move to personalization: check the player profile, then compile_guitar_version.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -595,7 +715,20 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
       },
     },
     execute: async (input) => {
-      const result = await resolveResearchedSong({ allowWarnings: input.allowWarnings === true });
+      let result;
+      try {
+        result = await resolveResearchedSong({ allowWarnings: input.allowWarnings === true });
+      } catch (err) {
+        return {
+          resolved: false,
+          error: 'BLUEPRINT_NOT_READY',
+          message: err instanceof Error ? err.message : String(err),
+          nextSuggestedTools: [
+            { name: 'get_song_research_brief', reason: 'Inspect the remaining evidence gaps or conflicts blocking resolution.', priority: 'HIGH' },
+          ],
+        };
+      }
+      const hasProfile = state.playerProfile !== null;
       return {
         resolved: result.resolved,
         origin: result.origin,
@@ -603,7 +736,16 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         status: result.status,
         warnings: result.warnings,
         songId: result.songId,
-        nextSuggestedTools: ['compare_guitar_levels', 'set_player_profile', 'compile_guitar_version'],
+        nextSuggestedTools: hasProfile
+          ? [
+              { name: 'compare_guitar_levels', reason: 'The player profile is known — compare Beginner/Intermediate/Advanced before compiling.', priority: 'HIGH' },
+              { name: 'compile_guitar_version', reason: 'Compile the personalized arrangement.', priority: 'HIGH' },
+            ]
+          : [
+              { name: 'get_player_profile', reason: 'Check whether the player’s ability is already known.', priority: 'HIGH' },
+              { name: 'set_player_profile', reason: 'If unknown, a preset like {"preset":"BEGINNER"} is enough for a safe personalized compile.', priority: 'HIGH' },
+              { name: 'compile_guitar_version', reason: 'Or compile now with the safe default level.', priority: 'MEDIUM' },
+            ],
       };
     },
   });

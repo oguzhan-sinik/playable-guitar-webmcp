@@ -223,6 +223,15 @@ export interface RequestSongResult {
   musicBrainz?: { recordingId: string; title: string; artist: string; ambiguous: boolean } | null;
 }
 
+/** Title-only request: ambiguous recording identity, research not started. */
+export interface IdentityNeedsConfirmation {
+  status: 'IDENTITY_NEEDS_CONFIRMATION';
+  query: string;
+  message: string;
+  researchNeeded: boolean;
+  request: { identity: SongRequest['identity'] };
+}
+
 /**
  * Establish song identity intent from a NAME (no link, no audio) and start/reuse
  * the compatible research session. Reuses the persisted session for the same
@@ -231,8 +240,19 @@ export interface RequestSongResult {
 export async function requestSong(
   input: { query?: unknown; title?: unknown; artist?: unknown; version?: unknown },
   deps: ResearchDeps = {},
-): Promise<RequestSongResult> {
+): Promise<RequestSongResult | IdentityNeedsConfirmation> {
   const request = createSongRequest(input);
+  // a named song without an artist is ambiguous (studio/live/cover/remix):
+  // never silently assume one recording — let the agent identify it first
+  if (request.identity.artist.length === 0) {
+    return {
+      status: 'IDENTITY_NEEDS_CONFIRMATION',
+      query: request.identity.title,
+      message: `Several recordings may match "${request.identity.title}". Identify the intended recording (web search or a quick clarification), then request it again with the artist.`,
+      researchNeeded: true,
+      request: { identity: request.identity },
+    };
+  }
   const before = current;
   const began = await beginSongResearch(
     {
@@ -257,18 +277,30 @@ export async function requestSong(
  * The agent-facing orchestration view: what is known, what is missing, and what
  * to research next. Deterministic — derived only from stored evidence.
  */
+/** Per-field search instructions so an agent knows exactly what to look for next. */
+const FIELD_INSTRUCTIONS: Record<string, string> = {
+  harmony: 'Find a public source describing the main or chorus chord progression.',
+  key: 'Find a source stating the musical key of the recording.',
+  tempo: 'Find an independent source stating the BPM.',
+  meter: 'Find a source stating the time signature.',
+  structure: 'Find a source describing the song form (verse/chorus order).',
+  identity: 'Confirm the exact recording (artist + title + version) from a music database.',
+};
+
 export function researchBrief(session: SongResearchSession, resolution: ResearchResolution): Record<string, unknown> {
   const compact = compactResearchStatus(session, resolution);
   const gaps = [...(resolution.gaps ?? [])].sort((a, b) => {
     const rank = (p: string): number => (p === 'HIGH' ? 0 : p === 'MEDIUM' ? 1 : 2);
     return rank(a.priority) - rank(b.priority);
   });
+  const ready = resolution.status === 'READY' || resolution.status === 'READY_WITH_WARNINGS';
   return {
     song: {
       title: session.songIdentity.title,
       ...(session.songIdentity.artist.length > 0 && { artist: session.songIdentity.artist }),
     },
     status: resolution.status,
+    readyToCompile: ready,
     understanding: {
       identity: resolution.confidence.identity,
       harmony: resolution.confidence.harmony,
@@ -280,10 +312,18 @@ export function researchBrief(session: SongResearchSession, resolution: Research
     },
     independentSources: compact.independentDomains,
     sources: compact.sources,
+    // the work queue: what to search for next, with exact queries
+    priorityTasks: gaps.slice(0, 4).map((g) => ({
+      field: g.field,
+      instruction: FIELD_INSTRUCTIONS[g.field] ?? `Find independent public evidence for ${g.field}.`,
+      priority: g.priority,
+      reason: g.reason,
+      suggestedQueries: g.suggestedQueries,
+    })),
     conflicts: resolution.conflicts.map((c) => ({
       field: c.field,
       readings: c.hypotheses.map((h) => h.value),
-      suggestedQueries: c.suggestedResolutionQueries.slice(0, 4),
+      suggestedResearchQueries: c.suggestedResolutionQueries.slice(0, 4),
     })),
     priorityGaps: gaps.slice(0, 4),
     suggestedQueries: gaps.flatMap((g) => g.suggestedQueries).slice(0, 8),
