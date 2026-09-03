@@ -1,9 +1,42 @@
-# Playable — Learn the Songs You Already Love, At the Level You Play Today
+# Playable — Tell Your AI Agent What Song You Want to Learn
 
-Paste a song link. Tell your agent what you can play. The site analyzes the
-song's musical structure, compiles a version that fits your hands, and turns
-it into an interactive practice session — with real chord diagrams and a
-synthesized preview of **exactly what you should play**.
+No link required. Name a song — your agent researches it on the public web,
+the site verifies the evidence and compiles a version that fits your hands,
+and you practice it in the browser with real chord diagrams and a synthesized
+preview of **exactly what you should play**.
+
+```
+User
+  ↓  "Teach me Perfect by Ed Sheeran. I'm a beginner."
+ChatGPT / browser agent          ← the ONLY agent; the page has no LLM
+  ↓  public web research (compact facts, multiple independent sources)
+WebMCP                           ← request_song · submit_song_evidence
+  ↓
+Evidence resolver                ← deterministic: normalizes, dedupes, weights
+  ↓
+SongBlueprint                    ← key · tempo · meter · harmony · form
+  ↓
+SongGraph
+  ↓
+Guitar compiler                  ← player-aware beam search, capo optimization
+  ↓
+Practice Studio                  ← diagrams · loop · metronome · exact synth
+```
+
+The agent never generates tabs and never generates music. It researches and
+submits small public facts; a deterministic resolver checks the evidence
+instead of trusting the model; the guitar compiler searches playable versions
+for that specific player's hands. The same selected arrangement drives the
+chords, chord diagrams, capo mapping, difficulty, practice plan, and the
+guitar sound the player hears.
+
+**Input modes** — all converge to a `SongGraph` before compilation:
+
+- **Song title + artist** (the hero path — no link, no audio)
+- Spotify / YouTube link (identity + research path)
+- Permitted direct audio (full MIR analysis)
+- Manual musical facts + the seeded legal demo song
+- Licensed catalog tracks (Jamendo, download-authorized)
 
 - **Music information retrieval**: multi-provider analysis (essentia, madmom,
   beat-this, all-in-one) with evidence-based consensus for tempo, meter,
@@ -60,15 +93,19 @@ attestation (`rightsConfirmed`) — an agent cannot assert it silently. A
 licensed catalog (Jamendo, `JAMENDO_CLIENT_ID`) provides a legal real-audio
 path for tracks that explicitly allow download.
 
-### The tools (20)
+### The tools (24)
 
 | Tool | Read/Write | Purpose | Visible UI effect |
 | --- | --- | --- | --- |
-| `load_song_from_link` | write | Load a YouTube / Spotify / direct-audio URL | Link card + source panel |
-| `begin_song_research` | read | Start evidence-based research; returns gaps + suggested queries | Agent Research board |
-| `submit_song_evidence` | write | Submit one compact musical fact + source URL | Evidence board updates live |
-| `get_song_research_status` | read | Per-field confidence, conflicts, independent domains | Agent Research board |
+| `request_song` | write | **No-link hero**: request a song by NAME (title/artist or free text) — identity intent only, then research | Hero input + research board |
+| `load_song_from_link` | write | Optional: load a YouTube / Spotify / direct-audio URL | Link card + source panel |
+| `get_song_research_brief` | read | What's missing: confidence, conflicts, gaps + suggested public-web queries | Song Understanding board |
+| `submit_song_evidence` | write | Batch compact facts from ONE source (`claims: [...]`); separate call per independent source | Evidence board updates live |
+| `get_song_research_status` | read | Per-field confidence, conflicts, independent domains, evidence list | Song Understanding board |
+| `validate_song_blueprint` | read | READY / READY_WITH_WARNINGS / NOT_READY + concrete issues | Readiness badge |
+| `get_song_blueprint` | read | Compact resolved blueprint: key, tempo, meter, harmony, form | — |
 | `resolve_researched_song` | write | Fuse evidence into a SongGraph (needs confidence, or `allowWarnings`) | Song becomes compilable |
+| `begin_song_research` | read | Legacy research entry (kept for compatibility) | Agent Research board |
 | `search_licensed_music` | read | Search the licensed catalog (Jamendo) | — |
 | `load_licensed_track` | write | Ingest a download-authorized licensed track | Song loads + analyzes |
 | `get_guitar_app_state` | read | Song, level, profile, arrangement, practice config | — |
@@ -87,17 +124,23 @@ path for tracks that explicitly allow download.
 
 Read-only tools carry `annotations: { readOnlyHint: true }`.
 
-### Composable hero flow
+### Composable hero flow (NO LINK)
 
 ```text
-load_song_from_link → analyze_song → set_player_profile
-→ compile_guitar_version → get_arrangement_diagnostics
-→ (compile again with stronger constraints if needed)
-→ choose_learning_section → configure_practice_session
-→ prepare_practice_preview → human presses ▶
+request_song ("Perfect", "Ed Sheeran")
+get_song_research_brief          → what's missing + suggested queries
+   … the agent researches the public web …
+submit_song_evidence             → batched facts, one call per independent source
+   … more research; brief re-checked; conflicts investigated …
+validate_song_blueprint          → READY / READY_WITH_WARNINGS
+resolve_researched_song          → SongBlueprint → SongGraph(RESEARCH_FUSION)
+set_player_profile
+compare_guitar_levels → compile_guitar_version → get_arrangement_diagnostics
+choose_learning_section → create_practice_plan → configure_practice_session
+prepare_practice_preview → human presses ▶
 ```
 
-### The research hero flow (Spotify favorite, no audio needed)
+### The link path (Spotify favorite, no audio needed)
 
 ```text
 load_song_from_link (Spotify)     → RESEARCHABLE, researchAvailable
@@ -131,9 +174,9 @@ await register({
 });
 ```
 
-All 14 tools register under one `AbortController`; `dispose()` aborts the
+All 24 tools register under one `AbortController`; `dispose()` aborts the
 signal and unregisters them. Browsers without WebMCP render the normal UI
-unchanged.
+unchanged — manual controls, the link path, and the debug invoker still work.
 
 ### Architecture
 
@@ -168,15 +211,78 @@ pnpm demo          # http://localhost:3847
 Open in Chrome 149+ with `chrome://flags/#enable-webmcp-testing` enabled (or
 the ChatGPT in-app browser) and say:
 
-> I'm new to guitar. I know C, G, D, Em and Am but I can't play barre chords
-> yet. Teach me this song: <paste a permitted link>. Find a faithful version
-> that feels comfortable for me, start with the chorus, I have 20 minutes.
-> Set up a practice session at a tempo I can handle and prepare an example of
-> exactly what I'm supposed to play.
+```text
+I want to learn Perfect by Ed Sheeran.
+
+I'm a beginner.
+
+I know C, G, D, Em and Am.
+
+I can't play barre chords yet.
+
+I have 20 minutes.
+
+Use the Site Tools on this page.
+
+Request the song by name.
+
+Research its musical structure using multiple independent public
+sources.
+
+Do not trust the first chord page you find.
+
+Find compact evidence for the song's identity, key, tempo,
+time signature, harmony, main section progressions, and structure.
+
+Do not copy full tabs, lyrics, or sheet music.
+
+Submit each independent source through the site's evidence tools.
+
+Check the research brief after adding evidence.
+
+If the site reports a conflict or missing important information,
+research that specific issue before continuing.
+
+Once the site considers the Song Blueprint reliable enough,
+resolve it.
+
+Then set my player profile, compare playable arrangements,
+compile the easiest faithful version for me, explain why it fits,
+choose the best section to start with, create a 20-minute practice
+session, and prepare the synthesized practice preview.
+
+Do not autoplay audio.
+```
+
+Expected live tool sequence:
+
+```text
+request_song → get_song_research_brief
+→ (external web research) → submit_song_evidence   ×2–4 independent sources
+→ get_song_research_brief → (targeted research) → submit_song_evidence
+→ validate_song_blueprint → resolve_researched_song
+→ set_player_profile → compare_guitar_levels → compile_guitar_version
+→ get_arrangement_diagnostics → choose_learning_section → create_practice_plan
+→ configure_practice_session → prepare_practice_preview
+```
+
+Verify registration in the browser console:
+
+```js
+(await document.modelContext.getTools()).map((t) => t.name)
+```
 
 The agent discovers the tools; the page visibly transforms with each call.
-Append `?debug=webmcp` for a hidden debug overlay (connection state, tool
-count, last invocation + duration).
+Append `?debug=webmcp` for the debug panel: connection state, the full tool
+table (read-only vs mutating, description, last call + duration + result), a
+**manual tool invoker** that calls the same action layer the agent reaches
+(with preset payloads for the major tools), and a **DEVELOPMENT REPLAY** that
+replays a synthetic research fixture through the real resolver — useful when
+external agent quotas are unavailable.
+
+> We don't put a chatbot inside a guitar website. We make the guitar website
+> itself agent-native. No LLM-generated tabs. No Spotify audio extraction. No
+> commercial recording redistribution. No generative music model.
 
 ### Demo song copyright
 

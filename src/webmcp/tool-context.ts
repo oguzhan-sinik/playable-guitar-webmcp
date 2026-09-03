@@ -594,6 +594,94 @@ export async function preparePracticePreview(): Promise<PreviewInfo> {
 
 // --- agent research (evidence fusion) ---
 
+/**
+ * NO-LINK HERO PATH: request a song by NAME. Establishes identity intent,
+ * clears every stale song artifact, KEEPS the player profile, and starts (or
+ * reuses) the compatible research session.
+ */
+export async function requestSong(input: {
+  query?: string;
+  title?: string;
+  artist?: string;
+  version?: string;
+}): Promise<{ title: string; artist: string; reused: boolean; research: ResearchStatus }> {
+  const data = await api<{
+    request: { identity: { title: string; artist: string } };
+    reused: boolean;
+    brief: Record<string, unknown>;
+    musicBrainz?: { recordingId: string; title: string; artist: string; ambiguous: boolean } | null;
+  }>('/api/song/request', input);
+  const brief = data.brief as {
+    status?: string | undefined;
+    understanding?: Record<string, number> | undefined;
+    independentSources?: number | undefined;
+    sources?: number | undefined;
+    conflicts?: Array<{ field: string; readings: unknown[] }> | undefined;
+    priorityGaps?: Array<{ field: string; reason: string; priority: string; suggestedQueries: string[] }> | undefined;
+    suggestedQueries?: string[] | undefined;
+    warnings?: string[] | undefined;
+    hypotheses?: string[] | undefined;
+  };
+  const research: ResearchStatus = {
+    active: true,
+    identity: { title: data.request.identity.title, artist: data.request.identity.artist },
+    musicBrainz: data.musicBrainz ?? null,
+    ...(brief.status !== undefined && { status: brief.status }),
+    ...(brief.sources !== undefined && { sources: brief.sources }),
+    ...(brief.independentSources !== undefined && { independentDomains: brief.independentSources }),
+    ...(brief.understanding !== undefined && {
+      confidence: brief.understanding as NonNullable<ResearchStatus['confidence']>,
+    }),
+    ...(brief.conflicts !== undefined && {
+      conflicts: brief.conflicts.map((c) => ({ field: c.field, readings: c.readings, families: 1 })),
+    }),
+    ...(brief.hypotheses !== undefined && { hypotheses: brief.hypotheses }),
+    ...(brief.priorityGaps !== undefined && { gaps: brief.priorityGaps }),
+    ...(brief.suggestedQueries !== undefined && { suggestedQueries: brief.suggestedQueries }),
+    ...(brief.warnings !== undefined && { warnings: brief.warnings }),
+  };
+  setState({
+    // identity intent is set — every artifact of the PREVIOUS song is stale
+    songId: '',
+    title: data.request.identity.title,
+    analysis: null,
+    sections: [],
+    currentSection: null,
+    arrangement: null,
+    explanation: null,
+    plan: null,
+    session: null,
+    preview: null,
+    diagnostics: null,
+    loadedSource: null,
+    // the player profile deliberately SURVIVES the song change
+    research,
+  });
+  logActivity(
+    data.reused
+      ? `Agent requested “${data.request.identity.title}” — existing research reused`
+      : `Agent requested “${data.request.identity.title}” by name — research started, no link needed`,
+  );
+  return {
+    title: data.request.identity.title,
+    artist: data.request.identity.artist,
+    reused: data.reused,
+    research: state.research!,
+  };
+}
+
+export async function fetchResearchBrief(): Promise<Record<string, unknown>> {
+  return api<Record<string, unknown>>('/api/research/brief');
+}
+
+export async function fetchSongBlueprint(): Promise<Record<string, unknown>> {
+  return api<Record<string, unknown>>('/api/research/blueprint');
+}
+
+export async function validateBlueprint(): Promise<Record<string, unknown>> {
+  return api<Record<string, unknown>>('/api/research/blueprint/validate');
+}
+
 export interface BeginResearchInput {
   title?: string;
   artist?: string;
@@ -619,8 +707,9 @@ export async function beginSongResearch(input: BeginResearchInput = {}): Promise
 }
 
 export interface SongEvidenceInput {
-  claimType: string;
-  value: unknown;
+  claimType?: string;
+  value?: unknown;
+  claims?: Array<Record<string, unknown>>;
   sourceUrl: string;
   sourceTitle?: string;
   sourceKind?: string;
@@ -631,11 +720,13 @@ export interface SongEvidenceInput {
   confidence?: number;
 }
 
-export async function submitSongEvidence(evidence: SongEvidenceInput): Promise<ResearchStatus & { added: boolean }> {
-  const data = await api<ResearchStatus & { added: boolean }>('/api/research/evidence', evidence as unknown as Record<string, unknown>);
+export async function submitSongEvidence(evidence: SongEvidenceInput): Promise<ResearchStatus & { added: boolean; addedCount: number }> {
+  const data = await api<ResearchStatus & { added: boolean; addedCount: number }>('/api/research/evidence', evidence as unknown as Record<string, unknown>);
   setState({ research: data });
-  if (data.added === false) logActivity(`Agent re-confirmed a known source (${evidence.sourceUrl}) — no confidence change`);
-  else logActivity(`Agent submitted ${evidence.claimType.toLowerCase()} evidence from ${new URL(evidence.sourceUrl).hostname}`);
+  const hostname = new URL(evidence.sourceUrl).hostname;
+  if (data.added === false) logActivity(`Agent re-confirmed a known source (${hostname}) — no confidence change`);
+  else if (Array.isArray(evidence.claims)) logActivity(`Agent submitted ${evidence.claims.length} facts from ${hostname}`);
+  else if (typeof evidence.claimType === 'string') logActivity(`Agent submitted ${evidence.claimType.toLowerCase()} evidence from ${hostname}`);
   return data;
 }
 

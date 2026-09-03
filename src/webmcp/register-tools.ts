@@ -25,6 +25,10 @@ import {
   submitSongEvidence,
   fetchResearchStatus,
   resolveResearchedSong,
+  requestSong,
+  fetchResearchBrief,
+  fetchSongBlueprint,
+  validateBlueprint,
   searchLicensedMusic,
   loadLicensedTrack,
   SKILL_LEVELS,
@@ -44,11 +48,25 @@ import {
 } from './schemas.js';
 import { recordToolInvocation } from './tool-events.js';
 
-export const TOOL_COUNT = 20;
+export const TOOL_COUNT = 24;
 
 export interface WebMcpRegistration {
   dispose(): void;
 }
+
+/**
+ * Name → executor for the SAME actions the browser agent reaches through
+ * document.modelContext. The ?debug=webmcp manual invoker calls these — never
+ * a parallel implementation.
+ */
+export const toolRegistry = new Map<string, (input: Record<string, unknown>) => Promise<unknown>>();
+/** Compact specs for the debug table. */
+export interface ToolSpec {
+  name: string;
+  readOnly: boolean;
+  description: string;
+}
+export const toolSpecs = new Map<string, ToolSpec>();
 
 function requireLevel(value: unknown, fallback: SkillLevel): SkillLevel {
   const level = typeof value === 'string' ? (value.toUpperCase() as SkillLevel) : fallback;
@@ -70,8 +88,6 @@ export function webMcpAvailable(): boolean {
 }
 
 export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> {
-  if (!webMcpAvailable()) return null;
-
   const controller = new AbortController();
   const { signal } = controller;
 
@@ -80,18 +96,63 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
     tool.execute = async (input) => {
       const startedAt = performance.now();
       try {
-        return await execute(input);
-      } finally {
-        recordToolInvocation(tool.name, startedAt);
+        const result = await execute(input);
+        recordToolInvocation(tool.name, startedAt, JSON.stringify(result).slice(0, 80));
+        return result;
+      } catch (err) {
+        recordToolInvocation(tool.name, startedAt, `ERROR: ${(err as Error).message.slice(0, 60)}`);
+        throw err;
       }
     };
+    toolRegistry.set(tool.name, tool.execute as (input: Record<string, unknown>) => Promise<unknown>);
+    toolSpecs.set(tool.name, {
+      name: tool.name,
+      readOnly: tool.annotations?.readOnlyHint === true,
+      description: tool.description,
+    });
+    if (!webMcpAvailable()) return; // debug registry still fills; no agent surface
     return document.modelContext!.registerTool(tool, { signal });
   };
 
   await register({
+    name: 'request_song',
+    description:
+      'Use this when the user NAMES a song they want to learn instead of providing a URL. This establishes song identity intent only — it does NOT claim the musical structure has been analyzed. After calling it, inspect get_song_research_brief and research compact public musical facts (identity, key, tempo, meter, harmony, form) across multiple independent sources before submitting evidence or resolving. A Spotify/YouTube link is NOT required.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Song title, e.g. "Perfect".' },
+        artist: { type: 'string', description: 'Artist name, e.g. "Ed Sheeran".' },
+        query: { type: 'string', description: 'Free text like "Perfect by Ed Sheeran" when title/artist are not separated.' },
+        version: { type: 'string', description: 'Optional: studio, live, acoustic, remix — prevents mixing recordings.' },
+      },
+    },
+    execute: async (input) => {
+      const result = await requestSong({
+        ...(typeof input.title === 'string' && input.title.trim().length > 0 && { title: input.title.trim() }),
+        ...(typeof input.artist === 'string' && input.artist.trim().length > 0 && { artist: input.artist.trim() }),
+        ...(typeof input.query === 'string' && input.query.trim().length > 0 && { query: input.query.trim() }),
+        ...(typeof input.version === 'string' && input.version.trim().length > 0 && { version: input.version.trim() }),
+      });
+      return {
+        requested: true,
+        reusedExistingResearch: result.reused,
+        song: { title: result.title, artist: result.artist },
+        status: result.research.status,
+        nextSuggestedTools: [
+          {
+            name: 'get_song_research_brief',
+            reason: 'The song has been selected but no verified harmony exists yet — inspect what musical facts are missing.',
+          },
+        ],
+      };
+    },
+  });
+
+  await register({
     name: 'load_song_from_link',
     description:
-      'Load a song into the guitar-learning application from a web URL. Use this when the user gives a YouTube, Spotify, or direct-audio link and wants to learn that song. The tool determines whether the source can be analyzed or is playback/metadata only, loads the song into the shared UI state, and returns the available next actions.',
+      'OPTIONAL alternative to request_song: load a song from a YouTube, Spotify, or direct-audio URL when the user supplies a link. Determines whether the source can be analyzed or is metadata/playback only, loads it into shared UI state, and returns the next actions. For a song the user only NAMES, prefer request_song.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -394,19 +455,42 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   await register({
     name: 'submit_song_evidence',
     description:
-      'Submit ONE compact musical fact observed on a public web page, with its source URL. Claim types: IDENTITY, KEY, TEMPO, METER, CHORD_SET, CHORD_PROGRESSION, SECTION, DURATION, CAPO. For chord claims from guitar sites, set chordRepresentation to PLAYED_GUITAR_SHAPES and pass the capo if the page shows one — the app converts played shapes into sounding harmony before comparing sources. Never submit full tabs, lyrics, or page contents — only small structured facts. Do not resubmit a fact/URL pair already submitted. Conflicting evidence is kept, not overwritten.',
+      'Submit compact musical evidence found on ONE public source, with its source URL. Batch multiple compact facts from the same source in one call via claims: [...] — use a separate call for each independent source. Claim types: IDENTITY, KEY, TEMPO, METER, CHORD_SET, CHORD_PROGRESSION, SECTION, FORM (ordered section outline), DURATION, CAPO, SHORT_MOTIF (max 16 notes). For chord claims from guitar sites, set chordRepresentation to PLAYED_GUITAR_SHAPES and pass the capo if the page shows one — the app converts played shapes into sounding harmony before comparing sources. Never submit full tabs, lyrics, complete sheet music, or large copied text — only small structured facts; oversized payloads are rejected. Duplicate fact/URL pairs do not increase confidence. Conflicting evidence is kept, not overwritten. After submitting, call get_song_research_brief to inspect remaining uncertainty.',
     inputSchema: {
       type: 'object',
       properties: {
+        claims: {
+          type: 'array',
+          description: 'BATCH form: several compact facts observed on the SAME page. Each item: { claimType, value, section?, chordRepresentation?, capo?, confidence? }.',
+          items: {
+            type: 'object',
+            properties: {
+              claimType: {
+                type: 'string',
+                enum: ['IDENTITY', 'KEY', 'TEMPO', 'METER', 'CHORD_SET', 'CHORD_PROGRESSION', 'SECTION', 'FORM', 'DURATION', 'CAPO', 'SHORT_MOTIF'],
+              },
+              value: {
+                description:
+                  'Compact fact. Examples: KEY {key:"Ab major"}; TEMPO {bpm:63}; METER {numerator:6,denominator:8}; CHORD_PROGRESSION {chords:["Ab","Fm","Db","Eb"], section:"chorus"}; FORM {sections:["intro","verse","chorus"]}; IDENTITY {title, artist}.',
+              },
+              section: { type: 'string' },
+              chordRepresentation: { type: 'string', enum: ['SOUNDING_HARMONY', 'PLAYED_GUITAR_SHAPES', 'UNKNOWN'] },
+              capo: { type: 'number' },
+              confidence: { type: 'number' },
+            },
+            required: ['claimType', 'value'],
+          },
+        },
         claimType: {
           type: 'string',
-          enum: ['IDENTITY', 'KEY', 'TEMPO', 'METER', 'CHORD_SET', 'CHORD_PROGRESSION', 'SECTION', 'DURATION', 'CAPO'],
+          enum: ['IDENTITY', 'KEY', 'TEMPO', 'METER', 'CHORD_SET', 'CHORD_PROGRESSION', 'SECTION', 'FORM', 'DURATION', 'CAPO', 'SHORT_MOTIF'],
+          description: 'SINGLE-claim form (use claims[] instead when the page states several facts).',
         },
         value: {
           description:
             'Compact fact. Examples: KEY {key:"Ab major"}; TEMPO {bpm:63}; METER {numerator:6,denominator:8}; CHORD_PROGRESSION {chords:["Ab","Fm","Db","Eb"], section:"chorus"}; IDENTITY {title, artist}; SECTION {name:"chorus"}.',
         },
-        sourceUrl: { type: 'string', description: 'The public page where the fact was observed (required).' },
+        sourceUrl: { type: 'string', description: 'The public page where the fact(s) were observed (required).' },
         sourceTitle: { type: 'string' },
         sourceKind: {
           type: 'string',
@@ -417,12 +501,12 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         capo: { type: 'number', description: 'Capo position if the source shows one (0-11).' },
         confidence: { type: 'number', description: '0-1, how clearly the page states this fact.' },
       },
-      required: ['claimType', 'value', 'sourceUrl'],
     },
     execute: async (input) => {
       const result = await submitSongEvidence(input as never);
       return {
         added: result.added,
+        addedCount: result.addedCount,
         status: result.status,
         sources: result.sources,
         independentDomains: result.independentDomains,
@@ -430,6 +514,9 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         conflicts: result.conflicts,
         gaps: result.gaps,
         suggestedQueries: result.suggestedQueries,
+        nextSuggestedTools: [
+          { name: 'get_song_research_brief', reason: 'Inspect what musical facts are still missing before resolving.' },
+        ],
       };
     },
   });
@@ -459,9 +546,48 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
   });
 
   await register({
+    name: 'get_song_research_brief',
+    description:
+      'Inspect what musical information is still needed for the current song. Call this after request_song and again after submitting evidence. The result contains confidence, unresolved conflicts, evidence gaps, and suggested public-web search queries. Do not invent missing facts. Use external web research to find compact public musical facts, then submit those facts using submit_song_evidence.',
+    inputSchema: emptySchema,
+    annotations: READ_ONLY,
+    execute: async () => {
+      const payload = await fetchResearchBrief();
+      const brief = (payload as { brief?: Record<string, unknown> }).brief ?? payload;
+      return {
+        ...brief,
+        nextSuggestedTools: [
+          { name: 'submit_song_evidence', reason: 'Submit compact facts from independent public sources you have researched.' },
+          ...(brief.status === 'READY' || brief.status === 'READY_WITH_WARNINGS'
+            ? [{ name: 'resolve_song_blueprint', reason: 'Enough independent evidence exists to resolve an honest blueprint.' }]
+            : []),
+        ],
+      };
+    },
+  });
+
+  await register({
+    name: 'validate_song_blueprint',
+    description:
+      'Read-only readiness check of the researched song blueprint: whether it is READY, READY_WITH_WARNINGS, TENTATIVE, or NOT_READY, plus the concrete issues. Use before resolve_song_blueprint — do not resolve while a HIGH-priority gap remains unless the user accepts lower confidence.',
+    inputSchema: emptySchema,
+    annotations: READ_ONLY,
+    execute: async () => validateBlueprint(),
+  });
+
+  await register({
+    name: 'get_song_blueprint',
+    description:
+      'Get the resolved song blueprint: identity, key, tempo, meter, section harmony, form, confidence, warnings, and timing precision. Read-only and compact — evidence provenance stays in get_song_research_status. Available meaningfully once research has evidence.',
+    inputSchema: emptySchema,
+    annotations: READ_ONLY,
+    execute: async () => fetchSongBlueprint(),
+  });
+
+  await register({
     name: 'resolve_researched_song',
     description:
-      'Resolve the accumulated independent musical evidence into a provenance-rich SongGraph when confidence is sufficient. Do not call this if get_song_research_status still reports a high-priority evidence gap unless the user explicitly accepts a lower-confidence arrangement. On success the song becomes fully analyzable state: compile/practice tools work on it immediately.',
+      'Resolve the accumulated independent musical evidence (the Song Blueprint) into a provenance-rich SongGraph when confidence is sufficient. Operates ONLY on already-submitted evidence — it cannot invent musical structure. Do not call this if validate_song_blueprint or get_song_research_status still reports a high-priority gap unless the user explicitly accepts a lower-confidence arrangement. On success the song becomes fully analyzable state: compile/practice tools work on it immediately.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -546,7 +672,14 @@ export async function initWebMcp(): Promise<'connected' | 'unavailable' | 'error
   } catch {
     // page still works; analysis cards stay empty
   }
-  if (!webMcpAvailable()) return 'unavailable';
+  if (!webMcpAvailable()) {
+    try {
+      await registerWebMcpTools(); // fills the debug registry even without WebMCP
+    } catch {
+      // ignore — manual UI still works
+    }
+    return 'unavailable';
+  }
   try {
     await registerWebMcpTools();
     return 'connected';

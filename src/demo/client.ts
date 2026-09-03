@@ -3,7 +3,7 @@
  * Demo UI. Renders shared app state; manual interactions and WebMCP tool
  * calls both go through the same actions in webmcp/tool-context.ts.
  */
-import { initWebMcp, TOOL_COUNT } from '../webmcp/register-tools.js';
+import { initWebMcp, TOOL_COUNT, toolRegistry, toolSpecs } from '../webmcp/register-tools.js';
 import {
   state,
   setState,
@@ -22,9 +22,10 @@ import {
   fetchResearchStatus,
   submitSongEvidence,
   resolveResearchedSong,
+  requestSong,
   type SkillLevel,
 } from '../webmcp/tool-context.js';
-import { onActivity, onToolInvocation } from '../webmcp/tool-events.js';
+import { logActivity, onActivity, onToolInvocation, lastInvocationOf } from '../webmcp/tool-events.js';
 import { playPreview, stopPreview, playLooped, onCurrentChord } from '../webmcp/studio-playback.js';
 import { chordDiagramSvg } from '../presentation/guitar/chord-diagram-svg.js';
 import { chordDiagramFor } from '../presentation/guitar/chord-diagram.js';
@@ -51,10 +52,10 @@ const diagramSvg = (name: string, capo: number): string => {
 function render(): void {
   $('webmcpStatus').textContent =
     state.webmcp === 'connected'
-      ? `WebMCP Connected · ${TOOL_COUNT} tools`
+      ? `AI Agent Connected · WebMCP · ${TOOL_COUNT} tools`
       : state.webmcp === 'error'
         ? 'WebMCP registration failed'
-        : 'WebMCP unavailable in this browser';
+        : 'AI Site Tools unavailable in this browser — you can still use the app manually, paste a song link, or enter structured musical information.';
 
   document.querySelectorAll<HTMLButtonElement>('.levels button[data-level]').forEach((b) => {
     b.classList.toggle('active', b.dataset.level === state.level);
@@ -65,6 +66,7 @@ function render(): void {
 
   const a = state.analysis;
   const researchableSource = state.loadedSource !== null && state.loadedSource.capability === 'RESEARCHABLE';
+  const researchActive = state.research !== null;
   $('analysis').innerHTML = a
     ? `<div class="facts">
         <div><span>${Math.round(a.tempoBpm)} BPM</span><label>Tempo</label></div>
@@ -73,11 +75,13 @@ function render(): void {
         <div><span>${Math.round(a.confidence * 100)}%</span><label>Confidence</label></div>
       </div>
       <div class="chords">${a.harmony.mainChords.map((c) => `<span class="song-chord">${c}</span>`).join(' · ')}</div>`
-    : researchableSource
-      ? `<div class="notice">We found the song.<br />
-          This source doesn't expose analyzable audio, so your agent researches its musical structure from independent public sources.<br />
-          <span class="muted">Researching key, tempo, meter, harmony and sections…</span></div>`
-      : '<span class="muted">Not analyzed yet</span>';
+    : researchActive
+      ? '<span class="muted">Understanding the song from agent research…</span>'
+      : researchableSource
+        ? `<div class="notice">We found the song.<br />
+            This source doesn't expose analyzable audio, so your agent researches its musical structure from independent public sources.<br />
+            <span class="muted">Researching key, tempo, meter, harmony and sections…</span></div>`
+        : '<span class="muted">Tell your AI agent what song you want to learn — or request one above. Example: “Teach me Perfect by Ed Sheeran.”</span>';
 
   // actions that need an analyzable song are disabled while the page shows a
   // recognized-but-unanalyzable source
@@ -310,6 +314,36 @@ function highlightChord(chord: string | null): void {
       : '';
 }
 
+/** NO-LINK HERO: request a song by name; the agent researches the rest. */
+function bindSongRequest(): void {
+  const request = async (): Promise<void> => {
+    const query = ($('songName') as HTMLInputElement).value.trim();
+    if (query.length === 0) {
+      $('requestStatus').textContent = 'Type a song name first — e.g. "Perfect by Ed Sheeran".';
+      return;
+    }
+    const btn = $('requestSong') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = 'Requesting song…';
+    $('requestStatus').textContent = 'Establishing song identity and starting research…';
+    try {
+      const result = await requestSong({ query });
+      $('requestStatus').textContent = result.reused
+        ? `Research for “${result.title}” already exists — evidence kept.`
+        : `“${result.title}” requested. Your agent can now research key, tempo, meter, harmony and form.`;
+    } catch (e) {
+      $('requestStatus').textContent = `Error: ${err(e)}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Learn This Song';
+    }
+  };
+  $('requestSong').addEventListener('click', () => void request());
+  $('songName').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') void request();
+  });
+}
+
 function bindLinkInput(): void {
   const load = async (): Promise<void> => {
     const url = ($('songUrl') as HTMLInputElement).value.trim();
@@ -474,18 +508,256 @@ function bindDebugOverlay(): void {
   if (new URLSearchParams(location.search).get('debug') !== 'webmcp') return;
   const el = $('webmcpDebug');
   el.classList.remove('hidden');
-  const update = (line?: string): void => {
-    el.textContent =
-      `WebMCP: ${state.webmcp} · tools registered: ${TOOL_COUNT}` +
-      (line !== undefined ? ` · last: ${line}` : '');
+  $('debugStatus').textContent = `WebMCP ${state.webmcp.toUpperCase()} · Registered tools: ${TOOL_COUNT}`;
+
+  // tool table: name / read-only / description / last call
+  const renderTable = (): void => {
+    $('debugTools').innerHTML =
+      '<table><tr><th>tool</th><th>kind</th><th>last call</th></tr>' +
+      [...toolSpecs.values()]
+        .map((spec) => {
+          const last = lastInvocationOf(spec.name);
+          const desc = spec.description.length > 110 ? `${spec.description.slice(0, 110)}…` : spec.description;
+          return `<tr><td title="${spec.description.replace(/"/g, '&quot;')}"><strong>${spec.name}</strong><div class="muted">${desc}</div></td><td>${spec.readOnly ? 'read-only' : 'mutating'}</td><td>${
+            last !== undefined ? `${last.durationMs}ms<div class="muted">${last.result ?? ''}</div>` : '<span class="muted">—</span>'
+          }</td></tr>`;
+        })
+        .join('') +
+      '</table>';
   };
-  update();
-  onToolInvocation((invocation) => update(`${invocation.tool} · ${invocation.durationMs}ms`));
+  renderTable();
+
+  // manual invoker — calls the SAME executors the browser agent reaches
+  const select = $('debugToolSelect') as HTMLSelectElement;
+  for (const name of [...toolRegistry.keys()].sort()) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    select.appendChild(option);
+  }
+  const presets: Record<string, unknown> = {
+    request_song: { title: 'Perfect', artist: 'Ed Sheeran' },
+    submit_song_evidence: {
+      sourceUrl: 'https://chords.example/perfect',
+      sourceTitle: 'Perfect chords',
+      sourceKind: 'CHORD_RESOURCE',
+      claims: [
+        { claimType: 'KEY', value: { key: 'Ab major' } },
+        { claimType: 'TEMPO', value: { bpm: 63 } },
+        { claimType: 'CHORD_PROGRESSION', value: { chords: ['Ab', 'Fm', 'Db', 'Eb'], section: 'chorus' }, chordRepresentation: 'SOUNDING_HARMONY' },
+      ],
+    },
+    set_player_profile: { knownChords: ['G', 'C', 'D', 'Em', 'Am'], barreChordsComfortable: false },
+    compile_guitar_version: { level: 'BEGINNER', avoidBarreChords: true },
+    configure_practice_session: { loop: true, metronome: true, countInBars: 1, minutes: 20 },
+  };
+  $('debugPresets').innerHTML = Object.keys(presets)
+    .map(
+      (name) =>
+        `<button type="button" class="preset-chip" data-preset="${name}">${name}</button>`,
+    )
+    .join('');
+  $('debugPresets').addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-preset]');
+    if (btn === null) return;
+    select.value = btn.dataset.preset!;
+    ($('debugInput') as HTMLTextAreaElement).value = JSON.stringify(presets[btn.dataset.preset!], null, 2);
+  });
+  $('debugInvoke').addEventListener('click', () => {
+    const name = select.value;
+    const execute = toolRegistry.get(name);
+    if (execute === undefined) {
+      $('debugResult').textContent = 'unknown tool';
+      return;
+    }
+    let input: Record<string, unknown> = {};
+    try {
+      const raw = ($('debugInput') as HTMLTextAreaElement).value.trim();
+      input = raw.length > 0 ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    } catch {
+      $('debugResult').textContent = 'invalid JSON';
+      return;
+    }
+    $('debugResult').textContent = 'invoking…';
+    void execute(input)
+      .then((result) => {
+        $('debugResult').textContent = 'ok';
+        console.log(`[debug] ${name} →`, result);
+        renderTable();
+      })
+      .catch((e: unknown) => {
+        $('debugResult').textContent = `error: ${err(e)}`;
+        renderTable();
+      });
+  });
+
+  $('debugReplay').addEventListener('click', () => void runResearchReplay());
+  onToolInvocation(renderTable);
+}
+
+/**
+ * DEVELOPMENT REPLAY: legal synthetic fixture through the REAL application
+ * actions — request by name, conflicting evidence from independent sources,
+ * capo equivalence, tempo conflict, resolution, compile, practice. No
+ * hardcoded SongGraph anywhere.
+ */
+async function runResearchReplay(): Promise<void> {
+  const invoke = async (name: string, input: Record<string, unknown>): Promise<unknown> => {
+    const execute = toolRegistry.get(name);
+    if (execute === undefined) throw new Error(`tool not registered: ${name}`);
+    const result = await execute(input);
+    renderReplayStep(`${name} ok`);
+    return result;
+  };
+  const renderReplayStep = (line: string): void => {
+    $('replayStatus').textContent = line;
+  };
+  const call = (action: () => Promise<unknown>, done: string): Promise<void> =>
+    action().then(() => {
+      logActivity(done);
+    });
+
+  try {
+    renderReplayStep('requesting song…');
+    await call(
+      () => invoke('request_song', { title: 'City Lights', artist: 'The Analog Hearts' }),
+      'REPLAY · Song requested by name (no link)',
+    );
+
+    renderReplayStep('submitting identity sources…');
+    await call(
+      () =>
+        invoke('submit_song_evidence', {
+          sourceUrl: 'https://encyclopedia.example/city-lights',
+          sourceTitle: 'City Lights — recording',
+          sourceKind: 'MUSIC_DATABASE',
+          claims: [{ claimType: 'IDENTITY', value: { title: 'City Lights', artist: 'The Analog Hearts' } }],
+        }),
+      'REPLAY · First identity source added',
+    );
+    await call(
+      () =>
+        invoke('submit_song_evidence', {
+          sourceUrl: 'https://music-index.example/city-lights-single',
+          sourceTitle: 'City Lights single page',
+          sourceKind: 'MUSIC_DATABASE',
+          claims: [{ claimType: 'IDENTITY', value: { title: 'City Lights', artist: 'The Analog Hearts', durationSeconds: 214 } }],
+        }),
+      'REPLAY · Second independent identity source added',
+    );
+
+    renderReplayStep('submitting harmony sources…');
+    await call(
+      () =>
+        invoke('submit_song_evidence', {
+          sourceUrl: 'https://chords-fan.example/city-lights',
+          sourceTitle: 'City Lights chords (capo 1)',
+          sourceKind: 'CHORD_RESOURCE',
+          claims: [
+            { claimType: 'KEY', value: { key: 'Ab major' } },
+            { claimType: 'CHORD_PROGRESSION', value: { chords: ['G', 'Em', 'C', 'D'], section: 'chorus' }, chordRepresentation: 'PLAYED_GUITAR_SHAPES', capo: 1 },
+            { claimType: 'CAPO', value: { capo: 1 } },
+          ],
+        }),
+      'REPLAY · Harmony source A added (capo 1 played shapes)',
+    );
+    await call(
+      () =>
+        invoke('submit_song_evidence', {
+          sourceUrl: 'https://theory-site.example/city-lights-harmony',
+          sourceTitle: 'City Lights sounding harmony',
+          sourceKind: 'MUSIC_ANALYSIS_RESOURCE',
+          claims: [
+            { claimType: 'KEY', value: { key: 'Ab major' } },
+            { claimType: 'CHORD_PROGRESSION', value: { chords: ['Ab', 'Fm', 'Db', 'Eb'], section: 'chorus' }, chordRepresentation: 'SOUNDING_HARMONY' },
+          ],
+        }),
+      'REPLAY · Harmony source B added — capo equivalence detected against source A',
+    );
+
+    renderReplayStep('submitting tempo evidence…');
+    await call(
+      () =>
+        invoke('submit_song_evidence', {
+          sourceUrl: 'https://song-blog.example/city-lights-review',
+          sourceTitle: 'City Lights review',
+          sourceKind: 'ARTICLE',
+          claims: [{ claimType: 'TEMPO', value: { bpm: 63 } }],
+        }),
+      'REPLAY · Tempo source A: 63 BPM',
+    );
+    await call(
+      () =>
+        invoke('submit_song_evidence', {
+          sourceUrl: 'https://fansite.example/city-lights-facts',
+          sourceTitle: 'City Lights facts',
+          sourceKind: 'MUSIC_DATABASE',
+          claims: [{ claimType: 'TEMPO', value: { bpm: 126 } }],
+        }),
+      'REPLAY · Tempo source B: 126 BPM — metrical disagreement detected',
+    );
+
+    renderReplayStep('resolving tempo conflict…');
+    await call(
+      () =>
+        invoke('submit_song_evidence', {
+          sourceUrl: 'https://music-analysis.example/city-lights-analysis',
+          sourceTitle: 'City Lights musical analysis',
+          sourceKind: 'MUSIC_ANALYSIS_RESOURCE',
+          claims: [
+            { claimType: 'TEMPO', value: { bpm: 63 } },
+            { claimType: 'METER', value: { numerator: 6, denominator: 8 } },
+            { claimType: 'FORM', value: { sections: ['intro', 'verse', 'chorus', 'verse', 'chorus', 'bridge', 'chorus'] } },
+          ],
+        }),
+      'REPLAY · Meter + form evidence added — tempo conflict resolved (126 = double-time pulse)',
+    );
+
+    renderReplayStep('validating + resolving blueprint…');
+    await invoke('validate_song_blueprint', {});
+    await call(
+      () => invoke('resolve_researched_song', { allowWarnings: true }),
+      'REPLAY · Song Blueprint resolved into a SongGraph',
+    );
+
+    renderReplayStep('setting player profile…');
+    await call(
+      () =>
+        invoke('set_player_profile', {
+          knownChords: ['G', 'C', 'D', 'Em', 'Am'],
+          barreChordsComfortable: false,
+          practicePreferences: { avoidBarreChords: true },
+        }),
+      'REPLAY · Player profile applied (beginner, no barre chords)',
+    );
+
+    renderReplayStep('compiling arrangement…');
+    const compiled = (await invoke('compile_guitar_version', { level: 'BEGINNER', avoidBarreChords: true })) as {
+      capo: number;
+      chords: string[];
+      playerDifficulty: number;
+    };
+    logActivity(
+      `REPLAY · Compiled beginner version (capo ${compiled.capo}, plays ${compiled.chords.join(' ')}, difficulty for you ${compiled.playerDifficulty.toFixed(1)})`,
+    );
+
+    renderReplayStep('choosing section…');
+    await call(() => invoke('choose_learning_section', { section: 'CHORUS' }), 'REPLAY · Chorus selected as the starting section');
+
+    renderReplayStep('configuring practice…');
+    await call(() => invoke('configure_practice_session', { loop: true, metronome: true, countInBars: 1, minutes: 20 }), 'REPLAY · 20-minute practice session configured');
+    await call(() => invoke('prepare_practice_preview', {}), 'REPLAY · Practice preview ready (the human presses Play)');
+
+    renderReplayStep('done ✓');
+  } catch (e) {
+    renderReplayStep(`replay failed: ${err(e)}`);
+  }
 }
 
 async function main(): Promise<void> {
   render();
   bindManualControls();
+  bindSongRequest();
   bindActivityFeed();
   bindLinkInput();
   bindDebugOverlay();

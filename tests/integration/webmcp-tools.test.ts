@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { registerWebMcpTools, TOOL_COUNT } from '../../src/webmcp/register-tools.js';
+import { registerWebMcpTools, TOOL_COUNT, toolRegistry } from '../../src/webmcp/register-tools.js';
 import {
   state,
   setState,
@@ -189,9 +189,13 @@ describe('webmcp registration', () => {
     await expect(toolFor('set_player_profile').execute({})).rejects.toThrow(/at least one/);
   });
 
-  it('returns null when WebMCP is unavailable', async () => {
+  it('without WebMCP the tools still build for the debug invoker but never reach document.modelContext', async () => {
+    (globalThis as { document?: unknown }).document = {};
     const registration = await registerWebMcpTools();
-    expect(registration).toBeNull();
+    expect(registration).not.toBeNull();
+    expect(toolRegistry.size).toBe(TOOL_COUNT);
+    expect(toolRegistry.get('request_song')).toBeTypeOf('function');
+    registration?.dispose();
   });
 
   it('set_player_level updates shared state and rejects invalid levels', async () => {
@@ -410,5 +414,130 @@ describe('compile result structure', () => {
     expect(Array.isArray(compiled.chords)).toBe(true);
     expect(compiled.ladder.length).toBe(3);
     expect(compiled.changes.length).toBeGreaterThan(0);
+  });
+});
+
+describe('NO-LINK HERO FLOW (request by name → research → resolve → compile → practice)', () => {
+  let server: Server;
+  let base = '';
+  let realFetch: typeof fetch;
+
+  beforeAll(async () => {
+    // deterministic test: never touch the network for identity lookup
+    realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      if (String(input).includes('musicbrainz.org')) throw new Error('offline test');
+      return realFetch(input, init);
+    }) as typeof fetch;
+    server = createDemoServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    setApiBase(base);
+    mockModelContext();
+    await registerWebMcpTools();
+  });
+
+  afterAll(async () => {
+    globalThis.fetch = realFetch;
+    setApiBase('');
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it('runs the whole agent flow without any URL or audio', async () => {
+    // unique per run: research sessions persist by identity key on disk
+    const artist = `The Analog Hearts ${Date.now().toString(36)}`;
+    // 1. request the song BY NAME — no link anywhere in this flow
+    const requested = (await toolFor('request_song').execute({
+      title: 'City Lights',
+      artist,
+    })) as { requested: boolean; song: { title: string }; status: string };
+    expect(requested.requested).toBe(true);
+    expect(state.title).toBe('City Lights');
+    expect(state.arrangement).toBeNull(); // stale arrangement cleared
+
+    // the player profile arrives BEFORE/DURING research and survives song changes
+    await toolFor('set_player_profile').execute({
+      knownChords: ['G', 'C', 'D', 'Em', 'Am'],
+      barreChordsComfortable: false,
+      avoidBarreChords: true,
+    });
+    expect(state.playerProfile).not.toBeNull();
+
+    // 2. research brief identifies missing facts
+    const brief = (await toolFor('get_song_research_brief').execute({})) as {
+      song: { title: string };
+      status: string;
+      priorityGaps: Array<{ field: string }>;
+    };
+    expect(brief.song.title).toBe('City Lights');
+    expect(brief.priorityGaps.some((g) => g.field === 'harmony')).toBe(true);
+
+    // 3. batched evidence from independent sources (synthetic fixture)
+    await toolFor('submit_song_evidence').execute({
+      sourceUrl: 'https://encyclopedia.example/city-lights',
+      sourceKind: 'MUSIC_DATABASE',
+      claims: [{ claimType: 'IDENTITY', value: { title: 'City Lights', artist } }],
+    });
+    await toolFor('submit_song_evidence').execute({
+      sourceUrl: 'https://chords-fan.example/city-lights',
+      sourceKind: 'CHORD_RESOURCE',
+      claims: [
+        { claimType: 'KEY', value: { key: 'Ab major' } },
+        { claimType: 'CHORD_PROGRESSION', value: { chords: ['G', 'Em', 'C', 'D'], section: 'chorus' }, chordRepresentation: 'PLAYED_GUITAR_SHAPES', capo: 1 },
+      ],
+    });
+    await toolFor('submit_song_evidence').execute({
+      sourceUrl: 'https://theory-site.example/city-lights',
+      sourceKind: 'MUSIC_ANALYSIS_RESOURCE',
+      claims: [
+        { claimType: 'KEY', value: { key: 'Ab major' } },
+        { claimType: 'CHORD_PROGRESSION', value: { chords: ['Ab', 'Fm', 'Db', 'Eb'], section: 'chorus' }, chordRepresentation: 'SOUNDING_HARMONY' },
+        { claimType: 'TEMPO', value: { bpm: 63 } },
+        { claimType: 'METER', value: { numerator: 6, denominator: 8 } },
+        { claimType: 'FORM', value: { sections: ['intro', 'verse', 'chorus'] } },
+      ],
+    });
+
+    // 4. blueprint projections
+    const blueprint = (await toolFor('get_song_blueprint').execute({})) as {
+      mainHarmony: string[];
+      timingPrecision: string;
+      form: string[];
+    };
+    expect(blueprint.mainHarmony).toEqual(['Ab', 'Fm', 'Db', 'Eb']); // capo equivalence merged both sources
+    expect(blueprint.timingPrecision).toBe('SECTION_RELATIVE');
+    const validation = (await toolFor('validate_song_blueprint').execute({})) as { status: string; canResolve: boolean };
+    expect(['READY', 'READY_WITH_WARNINGS', 'NOT_READY']).toContain(validation.status);
+
+    // 5. resolve → SongGraph → compile for THIS player
+    const resolved = (await toolFor('resolve_researched_song').execute({ allowWarnings: true })) as {
+      resolved: boolean;
+      origin: string;
+      songId: string;
+    };
+    expect(resolved.resolved).toBe(true);
+    expect(resolved.origin).toBe('RESEARCH_FUSION');
+    expect(state.songId).toBe(resolved.songId);
+
+    const compiled = (await toolFor('compile_guitar_version').execute({ level: 'BEGINNER', avoidBarreChords: true })) as {
+      capo: number;
+      chords: string[];
+      playerDifficulty: number;
+      fidelity: number;
+    };
+    expect(compiled.playerDifficulty).toBeGreaterThan(0);
+    expect(compiled.fidelity).toBeGreaterThan(0.5);
+    expect(state.playerProfile).not.toBeNull(); // profile still intact after the full flow
+
+    // 6. teaching flow
+    const section = (await toolFor('choose_learning_section').execute({ section: 'CHORUS' })) as { section: string };
+    expect(section.section).toBe('CHORUS');
+    const session = (await toolFor('configure_practice_session').execute({ minutes: 20, loop: true, metronome: true })) as {
+      totalMinutes: number;
+    };
+    expect(session.totalMinutes).toBe(20);
+    const preview = (await toolFor('prepare_practice_preview').execute({})) as { ready: boolean; playedByHuman: boolean };
+    expect(preview.ready).toBe(true);
+    expect(preview.playedByHuman).toBe(true); // no autoplay — the human presses Play
   });
 });

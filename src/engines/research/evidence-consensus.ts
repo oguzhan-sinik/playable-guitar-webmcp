@@ -126,14 +126,15 @@ export interface KeyResult {
   conflict?: ResearchConflict | undefined;
 }
 
-export function resolveKey(evidence: MusicalEvidence[], harmonyChords: CanonicalChord[]): KeyResult {
+export function resolveKey(evidence: MusicalEvidence[], harmonyChords: CanonicalChord[], preferFlats?: boolean): KeyResult {
   const items = evidence.filter((ev) => ev.claimType === 'KEY');
   const parsed = items
     .map((ev) => ({ evidence: ev, canonical: parseKey((ev.value as { key: string }).key) }))
     .filter((p): p is { evidence: MusicalEvidence; canonical: CanonicalKey } => p.canonical !== null);
   const groups = clusterEvidence(parsed, (a, b) => a.tonicPitchClass === b.tonicPitchClass && a.mode === b.mode);
 
-  const flats = preferFlatSpelling(harmonyChords.map((c) => c.label));
+  // spelling: caller-provided preference (harmony consensus), else the labels themselves
+  const flats = preferFlats ?? preferFlatSpelling(harmonyChords.map((c) => c.label));
   if (groups.length === 0) {
     const inferred = inferKeyFromChords(harmonyChords);
     if (inferred === null || inferred.score < 0.75) {
@@ -292,10 +293,15 @@ export function resolveHarmony(evidence: MusicalEvidence[]): HarmonyResult {
   const bySection = new Map<string, Array<{ evidence: MusicalEvidence; canonical: CanonicalChord[] }>>();
   const hypotheses: ResearchHypothesis[] = [];
 
+  // a standalone CAPO claim supplies the context for played-shape claims that
+  // don't carry their own capo
+  const capoClaims = evidence.filter((ev) => ev.claimType === 'CAPO');
+  const defaultCapo = capoClaims.length > 0 ? (capoClaims[0]!.value as { capo: number }).capo : 0;
+
   for (const ev of items) {
     const v = ev.value as { chords: string[]; section?: string };
     const section = normalizeSectionLabel(ev.context?.section ?? v.section ?? 'SONG');
-    const capo = ev.context?.capo ?? 0;
+    const capo = ev.context?.capo ?? (ev.context?.chordRepresentation === 'PLAYED_GUITAR_SHAPES' ? defaultCapo : 0);
     // played shapes at a capo become sounding harmony BEFORE any comparison
     const chords = v.chords.map((c) => parseChordSymbol(c, capo)).filter((c): c is CanonicalChord => c !== null);
     if (chords.length === 0) continue;
@@ -333,7 +339,10 @@ export function resolveHarmony(evidence: MusicalEvidence[]): HarmonyResult {
     });
   }
 
-  const preferFlats = preferFlatSpelling(sections.flatMap((s) => s.chords.map((c) => c.label)));
+  // spelling preference considers ALL submitted chord symbols — a capo-shapes
+  // source has no accidentals in its labels but its sounding peers may
+  const allSubmittedLabels = [...bySection.values()].flatMap((list) => list.flatMap((entry) => entry.canonical.map((c) => c.label)));
+  const preferFlats = preferFlatSpelling(allSubmittedLabels);
   const counts = new Map<string, number>();
   for (const s of sections) {
     for (const c of s.chords) {
@@ -362,18 +371,30 @@ export interface StructureResult {
 
 export function resolveStructure(evidence: MusicalEvidence[], harmony: HarmonyResult): StructureResult {
   const sectionEvidence = evidence.filter((ev) => ev.claimType === 'SECTION');
+  // FORM / SECTION_STRUCTURE claims carry the whole ordered outline at once
+  const formEvidence = evidence.filter((ev) => ev.claimType === 'FORM' || ev.claimType === 'SECTION_STRUCTURE');
   const order: string[] = [];
-  for (const ev of sectionEvidence) {
-    const label = normalizeSectionLabel((ev.value as { name: string }).name);
+  const pushSection = (label: string): void => {
     if (!order.includes(label)) order.push(label);
+  };
+  for (const ev of formEvidence) {
+    for (const name of (ev.value as { sections: string[] }).sections) pushSection(normalizeSectionLabel(name));
+  }
+  for (const ev of sectionEvidence) {
+    pushSection(normalizeSectionLabel((ev.value as { name: string }).name));
   }
   // sections implied by progression evidence count as weaker structural support
   for (const s of harmony.sections) {
-    if (s.section !== 'SONG' && !order.includes(s.section)) order.push(s.section);
+    if (s.section !== 'SONG') pushSection(s.section);
   }
   const sectionWeights = familyWeights(sectionEvidence);
-  const explicit = combineWeights([...sectionWeights.values()]);
+  const formWeights = familyWeights(formEvidence);
+  const explicit = combineWeights([...sectionWeights.values(), ...formWeights.values()]);
   const hasHarmonySections = harmony.sections.some((s) => s.section !== 'SONG');
-  const confidence = sectionEvidence.length > 0 ? explicit : hasHarmonySections ? 0.4 + 0.3 * harmony.confidence : 0;
+  const confidence = sectionEvidence.length + formEvidence.length > 0
+    ? explicit
+    : hasHarmonySections
+      ? 0.4 + 0.3 * harmony.confidence
+      : 0;
   return { sectionOrder: order, confidence };
 }

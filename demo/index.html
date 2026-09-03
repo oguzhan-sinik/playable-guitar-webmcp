@@ -66,6 +66,13 @@
     .studio-row { display:flex; align-items:center; gap:.75rem; margin:.6rem 0; font-size:.9rem; }
     .studio-row input[type=range] { flex:1; accent-color: var(--accent); }
     #webmcpDebug { font-size:.75rem; color:var(--muted); margin-top:2rem; border-top:1px solid var(--line); padding-top:.75rem; }
+    #webmcpDebug table { border-collapse:collapse; margin:.5rem 0; width:100%; }
+    #webmcpDebug th, #webmcpDebug td { text-align:left; padding:.2rem .5rem; border-bottom:1px solid var(--line); vertical-align:top; }
+    #webmcpDebug textarea { width:100%; min-height:7rem; border-radius:8px; border:1px solid var(--line); background:#12161f; color:var(--text); font-family:ui-monospace, monospace; font-size:.75rem; padding:.5rem; }
+    #webmcpDebug select, #webmcpDebug button { font-size:.75rem; padding:.3rem .5rem; border-radius:6px; border:1px solid var(--line); background:#12161f; color:var(--text); }
+    .preset-chip { display:inline-block; margin:.15rem .3rem .15rem 0; }
+    .debug-section { margin:.75rem 0; }
+    .debug-label { text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-size:.7rem; margin-bottom:.3rem; }
     .res-row { margin:.45rem 0; }
     .res-row .res-head { display:flex; justify-content:space-between; font-size:.8rem; color:var(--muted); }
     .res-row .res-head strong { color:var(--text); font-size:.85rem; }
@@ -83,28 +90,44 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Learn any song.</h1>
-    <p class="tag">At your level.</p>
+    <h1>What do you want to learn?</h1>
+    <p class="tag">Tell your AI agent the song. No upload, no link required.</p>
     <span id="webmcpStatus">Checking WebMCP…</span>
 
     <div id="agentFeed" class="hidden"></div>
 
-    <div class="card">
-      <label>Paste a song link</label>
-      <input id="songUrl" placeholder="YouTube / Spotify / audio URL" style="width:100%; padding:.75rem; border-radius:8px; border:1px solid var(--line); background:#12161f; color:var(--text); font-size:1rem" />
-      <label class="rights" style="display:flex; gap:.45rem; align-items:flex-start; margin-top:.6rem; text-transform:none; letter-spacing:0; font-size:.8rem">
-        <input type="checkbox" id="rightsConfirm" style="margin-top:.15rem" />
-        <span>I have permission or other lawful authorization to process media from this link (required for YouTube / direct-audio analysis).</span>
-      </label>
-      <button type="button" class="go" id="learn" style="width:100%">Learn This Song</button>
-      <div class="muted" style="font-size:.8rem; margin-top:.5rem">YouTube · Spotify · Direct audio — analysis where processing is permitted; Spotify songs get agent research instead.</div>
-      <div class="status" id="loadStatus"></div>
-      <div id="sourceCard" class="hidden" style="margin-top:.75rem">
-        <img id="sourceArt" class="hidden" alt="" style="max-width:100%; border-radius:8px; margin-bottom:.5rem" />
-        <div id="sourceTitle" style="font-weight:600"></div>
-        <div id="sourceNote" class="muted" style="font-size:.9rem; margin-top:.5rem"></div>
+    <div class="card hero">
+      <label>Song</label>
+      <input id="songName" placeholder='e.g. "Perfect by Ed Sheeran"' style="width:100%; padding:.75rem; border-radius:8px; border:1px solid var(--line); background:#12161f; color:var(--text); font-size:1rem" />
+      <div id="requestHint" class="muted" style="font-size:.85rem; margin-top:.6rem">
+        Type a song and your agent researches it — or just tell your agent: <em>“Teach me Perfect by Ed Sheeran. I’m a beginner, I can’t play barre chords, I have 20 minutes.”</em>
       </div>
-      <label style="margin-top:1rem">Current Song</label>
+      <button type="button" class="go" id="requestSong" style="width:100%">Learn This Song</button>
+      <div class="status" id="requestStatus"></div>
+    </div>
+
+    <details class="card">
+      <summary class="muted" style="cursor:pointer; font-weight:600">Have a Spotify / YouTube / audio link?</summary>
+      <div style="margin-top:.75rem">
+        <label>Paste a song link</label>
+        <input id="songUrl" placeholder="YouTube / Spotify / audio URL" style="width:100%; padding:.75rem; border-radius:8px; border:1px solid var(--line); background:#12161f; color:var(--text); font-size:1rem" />
+        <label class="rights" style="display:flex; gap:.45rem; align-items:flex-start; margin-top:.6rem; text-transform:none; letter-spacing:0; font-size:.8rem">
+          <input type="checkbox" id="rightsConfirm" style="margin-top:.15rem" />
+          <span>I have permission or other lawful authorization to process media from this link (required for YouTube / direct-audio analysis).</span>
+        </label>
+        <button type="button" class="go" id="learn" style="width:100%">Learn This Song</button>
+        <div class="muted" style="font-size:.8rem; margin-top:.5rem">YouTube · Spotify · Direct audio — analysis where processing is permitted; Spotify songs get agent research instead.</div>
+        <div class="status" id="loadStatus"></div>
+        <div id="sourceCard" class="hidden" style="margin-top:.75rem">
+          <img id="sourceArt" class="hidden" alt="" style="max-width:100%; border-radius:8px; margin-bottom:.5rem" />
+          <div id="sourceTitle" style="font-weight:600"></div>
+          <div id="sourceNote" class="muted" style="font-size:.9rem; margin-top:.5rem"></div>
+        </div>
+      </div>
+    </details>
+
+    <div class="card">
+      <label>Current Song</label>
       <div id="songTitle" style="font-weight:600">—</div>
       <label style="margin-top:1rem">Your Level</label>
       <div class="levels">
@@ -127,7 +150,7 @@
     </div>
 
     <div class="card hidden" id="researchCard">
-      <label>Agent Research</label>
+      <label>Song Understanding · Agent Research</label>
       <div id="researchBoard"></div>
       <div class="status" id="researchHint"></div>
     </div>
@@ -201,7 +224,23 @@
       <div class="ladder" id="ladder"></div>
     </div>
   </div>
-  <div class="wrap"><div id="webmcpDebug" class="hidden"></div></div>
+  <div class="wrap"><div id="webmcpDebug" class="hidden">
+    <div id="debugStatus"></div>
+    <div class="debug-section"><div class="debug-label">Registered tools</div><div id="debugTools" style="max-height:18rem; overflow:auto"></div></div>
+    <div class="debug-section">
+      <div class="debug-label">Manual tool invoker (same action layer as WebMCP)</div>
+      <div id="debugPresets"></div>
+      <select id="debugToolSelect"></select>
+      <textarea id="debugInput" placeholder='{ "title": "Perfect", "artist": "Ed Sheeran" }'></textarea>
+      <button type="button" id="debugInvoke">Invoke</button>
+      <span id="debugResult" style="margin-left:.5rem"></span>
+    </div>
+    <div class="debug-section">
+      <div class="debug-label">Development replay (synthetic fixture through the real resolver)</div>
+      <button type="button" id="debugReplay">Replay Agent Research Demo</button>
+      <span id="replayStatus" style="margin-left:.5rem"></span>
+    </div>
+  </div></div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

@@ -23,7 +23,7 @@ export function resolveSongResearch(session: SongResearchSession): ResearchResol
   const identity = resolveIdentity(session.songIdentity, evidence);
   const harmony = resolveHarmony(evidence);
   const allHarmonyChords = harmony.sections.flatMap((s) => s.chords);
-  const key = resolveKey(evidence, allHarmonyChords);
+  const key = resolveKey(evidence, allHarmonyChords, harmony.preferFlats);
   const tempo = resolveTempo(evidence);
   const meter = resolveMeter(evidence);
   const structure = resolveStructure(evidence, harmony);

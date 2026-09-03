@@ -14,8 +14,11 @@ export const CLAIM_TYPES = [
   'CHORD_SET',
   'CHORD_PROGRESSION',
   'SECTION',
+  'SECTION_STRUCTURE',
+  'FORM',
   'DURATION',
   'CAPO',
+  'SHORT_MOTIF',
 ] as const;
 export type EvidenceClaimType = (typeof CLAIM_TYPES)[number];
 
@@ -38,6 +41,9 @@ export interface MusicalEvidence {
 export const MAX_CHORD_TOKENS = 32;
 export const MAX_VALUE_CHARS = 4_000;
 export const MAX_TITLE_CHARS = 300;
+export const MAX_MOTIF_NOTES = 16;
+export const MAX_MOTIF_BARS = 4;
+export const MAX_FORM_SECTIONS = 24;
 
 let counter = 0;
 export function newEvidenceId(): string {
@@ -197,6 +203,54 @@ function validateValue(claimType: EvidenceClaimType, value: unknown): unknown {
         throw new AppError('DOMAIN_VALIDATION', 'SECTION value needs { name: "chorus" }');
       }
       return { name: name.trim().slice(0, 60) };
+    }
+    case 'SECTION_STRUCTURE':
+    case 'FORM': {
+      // ordered section labels, e.g. ["intro","verse","chorus",...] — a FORM outline,
+      // never a transcription
+      const sections = Array.isArray(v.sections)
+        ? v.sections
+        : Array.isArray(v.order)
+          ? v.order
+          : Array.isArray(value)
+            ? (value as unknown[])
+            : undefined;
+      if (sections === undefined || sections.length === 0 || !sections.every((s) => typeof s === 'string' && s.trim().length > 0)) {
+        throw new AppError('DOMAIN_VALIDATION', `${claimType} value needs { sections: ["intro", "verse", "chorus", ...] }`);
+      }
+      if (sections.length > MAX_FORM_SECTIONS) {
+        throw tooLarge(`more than ${MAX_FORM_SECTIONS} sections`);
+      }
+      return { sections: (sections as string[]).map((s) => s.trim().slice(0, 40)) };
+    }
+    case 'SHORT_MOTIF': {
+      // a SHORT signature phrase (intro riff / hook) — bounded well below
+      // transcription size; full melodies are rejected
+      const notes = Array.isArray(v.notes) ? v.notes : undefined;
+      if (notes === undefined || notes.length === 0) {
+        throw new AppError('DOMAIN_VALIDATION', 'SHORT_MOTIF value needs { notes: [{ pitchClass, octave?, relativeBeat?, durationBeats? }] }');
+      }
+      if (notes.length > MAX_MOTIF_NOTES) {
+        throw tooLarge(`more than ${MAX_MOTIF_NOTES} notes — submit only a short signature phrase, not a melody`);
+      }
+      const clean = notes.map((n) => {
+        const note = n as Record<string, unknown>;
+        if (typeof note.pitchClass !== 'number' || !Number.isInteger(note.pitchClass)) return null;
+        const out: Record<string, unknown> = { pitchClass: ((note.pitchClass % 12) + 12) % 12 };
+        if (typeof note.octave === 'number') out.octave = Math.round(note.octave);
+        if (typeof note.relativeBeat === 'number' && note.relativeBeat >= 0) out.relativeBeat = note.relativeBeat;
+        if (typeof note.durationBeats === 'number' && note.durationBeats > 0) out.durationBeats = note.durationBeats;
+        return out;
+      });
+      if (clean.some((n) => n === null)) {
+        throw new AppError('DOMAIN_VALIDATION', 'each motif note needs at least { pitchClass: 0-11 }');
+      }
+      const totalBeats = clean.reduce((sum, n) => sum + ((n!.durationBeats as number | undefined) ?? 0), 0);
+      const lastBeat = Math.max(0, ...clean.map((n) => (n!.relativeBeat as number | undefined) ?? 0));
+      if (totalBeats > MAX_MOTIF_BARS * 4 || lastBeat > MAX_MOTIF_BARS * 4) {
+        throw tooLarge(`motif longer than ${MAX_MOTIF_BARS} bars — submit only a short signature phrase`);
+      }
+      return { notes: clean };
     }
     case 'DURATION': {
       const seconds = typeof v.durationSeconds === 'number' ? v.durationSeconds : (typeof v === 'number' ? v : undefined);

@@ -504,10 +504,19 @@ function onActivity(listener) {
 function logActivity(message) {
   for (const listener of listeners) listener(message);
 }
+var lastByTool = /* @__PURE__ */ new Map();
+function lastInvocationOf(tool) {
+  return lastByTool.get(tool);
+}
 var lastInvocation = null;
 var invocationListeners = /* @__PURE__ */ new Set();
-function recordToolInvocation(tool, startedAtMs) {
-  lastInvocation = { tool, durationMs: Math.round(performance.now() - startedAtMs) };
+function recordToolInvocation(tool, startedAtMs, result) {
+  lastInvocation = {
+    tool,
+    durationMs: Math.round(performance.now() - startedAtMs),
+    ...result !== void 0 && { result }
+  };
+  lastByTool.set(tool, lastInvocation);
   for (const listener of invocationListeners) listener(lastInvocation);
 }
 function onToolInvocation(listener) {
@@ -19839,6 +19848,63 @@ async function preparePracticePreview() {
   );
   return info;
 }
+async function requestSong(input2) {
+  const data = await api("/api/song/request", input2);
+  const brief = data.brief;
+  const research = {
+    active: true,
+    identity: { title: data.request.identity.title, artist: data.request.identity.artist },
+    musicBrainz: data.musicBrainz ?? null,
+    ...brief.status !== void 0 && { status: brief.status },
+    ...brief.sources !== void 0 && { sources: brief.sources },
+    ...brief.independentSources !== void 0 && { independentDomains: brief.independentSources },
+    ...brief.understanding !== void 0 && {
+      confidence: brief.understanding
+    },
+    ...brief.conflicts !== void 0 && {
+      conflicts: brief.conflicts.map((c) => ({ field: c.field, readings: c.readings, families: 1 }))
+    },
+    ...brief.hypotheses !== void 0 && { hypotheses: brief.hypotheses },
+    ...brief.priorityGaps !== void 0 && { gaps: brief.priorityGaps },
+    ...brief.suggestedQueries !== void 0 && { suggestedQueries: brief.suggestedQueries },
+    ...brief.warnings !== void 0 && { warnings: brief.warnings }
+  };
+  setState({
+    // identity intent is set — every artifact of the PREVIOUS song is stale
+    songId: "",
+    title: data.request.identity.title,
+    analysis: null,
+    sections: [],
+    currentSection: null,
+    arrangement: null,
+    explanation: null,
+    plan: null,
+    session: null,
+    preview: null,
+    diagnostics: null,
+    loadedSource: null,
+    // the player profile deliberately SURVIVES the song change
+    research
+  });
+  logActivity(
+    data.reused ? `Agent requested \u201C${data.request.identity.title}\u201D \u2014 existing research reused` : `Agent requested \u201C${data.request.identity.title}\u201D by name \u2014 research started, no link needed`
+  );
+  return {
+    title: data.request.identity.title,
+    artist: data.request.identity.artist,
+    reused: data.reused,
+    research: state.research
+  };
+}
+async function fetchResearchBrief() {
+  return api("/api/research/brief");
+}
+async function fetchSongBlueprint() {
+  return api("/api/research/blueprint");
+}
+async function validateBlueprint() {
+  return api("/api/research/blueprint/validate");
+}
 async function beginSongResearch(input2 = {}) {
   const data = await api("/api/research/begin", {
     ...input2.title !== void 0 && input2.title.length > 0 && { title: input2.title },
@@ -19856,8 +19922,10 @@ async function beginSongResearch(input2 = {}) {
 async function submitSongEvidence(evidence) {
   const data = await api("/api/research/evidence", evidence);
   setState({ research: data });
-  if (data.added === false) logActivity(`Agent re-confirmed a known source (${evidence.sourceUrl}) \u2014 no confidence change`);
-  else logActivity(`Agent submitted ${evidence.claimType.toLowerCase()} evidence from ${new URL(evidence.sourceUrl).hostname}`);
+  const hostname3 = new URL(evidence.sourceUrl).hostname;
+  if (data.added === false) logActivity(`Agent re-confirmed a known source (${hostname3}) \u2014 no confidence change`);
+  else if (Array.isArray(evidence.claims)) logActivity(`Agent submitted ${evidence.claims.length} facts from ${hostname3}`);
+  else if (typeof evidence.claimType === "string") logActivity(`Agent submitted ${evidence.claimType.toLowerCase()} evidence from ${hostname3}`);
   return data;
 }
 async function fetchResearchStatus() {
@@ -19993,7 +20061,9 @@ var levelSchema = {
 };
 
 // src/webmcp/register-tools.ts
-var TOOL_COUNT = 20;
+var TOOL_COUNT = 24;
+var toolRegistry = /* @__PURE__ */ new Map();
+var toolSpecs = /* @__PURE__ */ new Map();
 function requireLevel(value, fallback) {
   const level = typeof value === "string" ? value.toUpperCase() : fallback;
   if (!SKILL_LEVELS.includes(level)) {
@@ -20010,7 +20080,6 @@ function webMcpAvailable() {
   return typeof document !== "undefined" && "modelContext" in document && document.modelContext !== void 0;
 }
 async function registerWebMcpTools() {
-  if (!webMcpAvailable()) return null;
   const controller = new AbortController();
   const { signal } = controller;
   const register = (tool) => {
@@ -20018,16 +20087,59 @@ async function registerWebMcpTools() {
     tool.execute = async (input2) => {
       const startedAt = performance.now();
       try {
-        return await execute(input2);
-      } finally {
-        recordToolInvocation(tool.name, startedAt);
+        const result = await execute(input2);
+        recordToolInvocation(tool.name, startedAt, JSON.stringify(result).slice(0, 80));
+        return result;
+      } catch (err2) {
+        recordToolInvocation(tool.name, startedAt, `ERROR: ${err2.message.slice(0, 60)}`);
+        throw err2;
       }
     };
+    toolRegistry.set(tool.name, tool.execute);
+    toolSpecs.set(tool.name, {
+      name: tool.name,
+      readOnly: tool.annotations?.readOnlyHint === true,
+      description: tool.description
+    });
+    if (!webMcpAvailable()) return;
     return document.modelContext.registerTool(tool, { signal });
   };
   await register({
+    name: "request_song",
+    description: "Use this when the user NAMES a song they want to learn instead of providing a URL. This establishes song identity intent only \u2014 it does NOT claim the musical structure has been analyzed. After calling it, inspect get_song_research_brief and research compact public musical facts (identity, key, tempo, meter, harmony, form) across multiple independent sources before submitting evidence or resolving. A Spotify/YouTube link is NOT required.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: 'Song title, e.g. "Perfect".' },
+        artist: { type: "string", description: 'Artist name, e.g. "Ed Sheeran".' },
+        query: { type: "string", description: 'Free text like "Perfect by Ed Sheeran" when title/artist are not separated.' },
+        version: { type: "string", description: "Optional: studio, live, acoustic, remix \u2014 prevents mixing recordings." }
+      }
+    },
+    execute: async (input2) => {
+      const result = await requestSong({
+        ...typeof input2.title === "string" && input2.title.trim().length > 0 && { title: input2.title.trim() },
+        ...typeof input2.artist === "string" && input2.artist.trim().length > 0 && { artist: input2.artist.trim() },
+        ...typeof input2.query === "string" && input2.query.trim().length > 0 && { query: input2.query.trim() },
+        ...typeof input2.version === "string" && input2.version.trim().length > 0 && { version: input2.version.trim() }
+      });
+      return {
+        requested: true,
+        reusedExistingResearch: result.reused,
+        song: { title: result.title, artist: result.artist },
+        status: result.research.status,
+        nextSuggestedTools: [
+          {
+            name: "get_song_research_brief",
+            reason: "The song has been selected but no verified harmony exists yet \u2014 inspect what musical facts are missing."
+          }
+        ]
+      };
+    }
+  });
+  await register({
     name: "load_song_from_link",
-    description: "Load a song into the guitar-learning application from a web URL. Use this when the user gives a YouTube, Spotify, or direct-audio link and wants to learn that song. The tool determines whether the source can be analyzed or is playback/metadata only, loads the song into the shared UI state, and returns the available next actions.",
+    description: "OPTIONAL alternative to request_song: load a song from a YouTube, Spotify, or direct-audio URL when the user supplies a link. Determines whether the source can be analyzed or is metadata/playback only, loads it into shared UI state, and returns the next actions. For a song the user only NAMES, prefer request_song.",
     inputSchema: {
       type: "object",
       properties: {
@@ -20291,18 +20403,40 @@ async function registerWebMcpTools() {
   });
   await register({
     name: "submit_song_evidence",
-    description: "Submit ONE compact musical fact observed on a public web page, with its source URL. Claim types: IDENTITY, KEY, TEMPO, METER, CHORD_SET, CHORD_PROGRESSION, SECTION, DURATION, CAPO. For chord claims from guitar sites, set chordRepresentation to PLAYED_GUITAR_SHAPES and pass the capo if the page shows one \u2014 the app converts played shapes into sounding harmony before comparing sources. Never submit full tabs, lyrics, or page contents \u2014 only small structured facts. Do not resubmit a fact/URL pair already submitted. Conflicting evidence is kept, not overwritten.",
+    description: "Submit compact musical evidence found on ONE public source, with its source URL. Batch multiple compact facts from the same source in one call via claims: [...] \u2014 use a separate call for each independent source. Claim types: IDENTITY, KEY, TEMPO, METER, CHORD_SET, CHORD_PROGRESSION, SECTION, FORM (ordered section outline), DURATION, CAPO, SHORT_MOTIF (max 16 notes). For chord claims from guitar sites, set chordRepresentation to PLAYED_GUITAR_SHAPES and pass the capo if the page shows one \u2014 the app converts played shapes into sounding harmony before comparing sources. Never submit full tabs, lyrics, complete sheet music, or large copied text \u2014 only small structured facts; oversized payloads are rejected. Duplicate fact/URL pairs do not increase confidence. Conflicting evidence is kept, not overwritten. After submitting, call get_song_research_brief to inspect remaining uncertainty.",
     inputSchema: {
       type: "object",
       properties: {
+        claims: {
+          type: "array",
+          description: "BATCH form: several compact facts observed on the SAME page. Each item: { claimType, value, section?, chordRepresentation?, capo?, confidence? }.",
+          items: {
+            type: "object",
+            properties: {
+              claimType: {
+                type: "string",
+                enum: ["IDENTITY", "KEY", "TEMPO", "METER", "CHORD_SET", "CHORD_PROGRESSION", "SECTION", "FORM", "DURATION", "CAPO", "SHORT_MOTIF"]
+              },
+              value: {
+                description: 'Compact fact. Examples: KEY {key:"Ab major"}; TEMPO {bpm:63}; METER {numerator:6,denominator:8}; CHORD_PROGRESSION {chords:["Ab","Fm","Db","Eb"], section:"chorus"}; FORM {sections:["intro","verse","chorus"]}; IDENTITY {title, artist}.'
+              },
+              section: { type: "string" },
+              chordRepresentation: { type: "string", enum: ["SOUNDING_HARMONY", "PLAYED_GUITAR_SHAPES", "UNKNOWN"] },
+              capo: { type: "number" },
+              confidence: { type: "number" }
+            },
+            required: ["claimType", "value"]
+          }
+        },
         claimType: {
           type: "string",
-          enum: ["IDENTITY", "KEY", "TEMPO", "METER", "CHORD_SET", "CHORD_PROGRESSION", "SECTION", "DURATION", "CAPO"]
+          enum: ["IDENTITY", "KEY", "TEMPO", "METER", "CHORD_SET", "CHORD_PROGRESSION", "SECTION", "FORM", "DURATION", "CAPO", "SHORT_MOTIF"],
+          description: "SINGLE-claim form (use claims[] instead when the page states several facts)."
         },
         value: {
           description: 'Compact fact. Examples: KEY {key:"Ab major"}; TEMPO {bpm:63}; METER {numerator:6,denominator:8}; CHORD_PROGRESSION {chords:["Ab","Fm","Db","Eb"], section:"chorus"}; IDENTITY {title, artist}; SECTION {name:"chorus"}.'
         },
-        sourceUrl: { type: "string", description: "The public page where the fact was observed (required)." },
+        sourceUrl: { type: "string", description: "The public page where the fact(s) were observed (required)." },
         sourceTitle: { type: "string" },
         sourceKind: {
           type: "string",
@@ -20312,20 +20446,23 @@ async function registerWebMcpTools() {
         chordRepresentation: { type: "string", enum: ["SOUNDING_HARMONY", "PLAYED_GUITAR_SHAPES", "UNKNOWN"] },
         capo: { type: "number", description: "Capo position if the source shows one (0-11)." },
         confidence: { type: "number", description: "0-1, how clearly the page states this fact." }
-      },
-      required: ["claimType", "value", "sourceUrl"]
+      }
     },
     execute: async (input2) => {
       const result = await submitSongEvidence(input2);
       return {
         added: result.added,
+        addedCount: result.addedCount,
         status: result.status,
         sources: result.sources,
         independentDomains: result.independentDomains,
         confidence: result.confidence,
         conflicts: result.conflicts,
         gaps: result.gaps,
-        suggestedQueries: result.suggestedQueries
+        suggestedQueries: result.suggestedQueries,
+        nextSuggestedTools: [
+          { name: "get_song_research_brief", reason: "Inspect what musical facts are still missing before resolving." }
+        ]
       };
     }
   });
@@ -20352,8 +20489,39 @@ async function registerWebMcpTools() {
     }
   });
   await register({
+    name: "get_song_research_brief",
+    description: "Inspect what musical information is still needed for the current song. Call this after request_song and again after submitting evidence. The result contains confidence, unresolved conflicts, evidence gaps, and suggested public-web search queries. Do not invent missing facts. Use external web research to find compact public musical facts, then submit those facts using submit_song_evidence.",
+    inputSchema: emptySchema,
+    annotations: READ_ONLY,
+    execute: async () => {
+      const payload = await fetchResearchBrief();
+      const brief = payload.brief ?? payload;
+      return {
+        ...brief,
+        nextSuggestedTools: [
+          { name: "submit_song_evidence", reason: "Submit compact facts from independent public sources you have researched." },
+          ...brief.status === "READY" || brief.status === "READY_WITH_WARNINGS" ? [{ name: "resolve_song_blueprint", reason: "Enough independent evidence exists to resolve an honest blueprint." }] : []
+        ]
+      };
+    }
+  });
+  await register({
+    name: "validate_song_blueprint",
+    description: "Read-only readiness check of the researched song blueprint: whether it is READY, READY_WITH_WARNINGS, TENTATIVE, or NOT_READY, plus the concrete issues. Use before resolve_song_blueprint \u2014 do not resolve while a HIGH-priority gap remains unless the user accepts lower confidence.",
+    inputSchema: emptySchema,
+    annotations: READ_ONLY,
+    execute: async () => validateBlueprint()
+  });
+  await register({
+    name: "get_song_blueprint",
+    description: "Get the resolved song blueprint: identity, key, tempo, meter, section harmony, form, confidence, warnings, and timing precision. Read-only and compact \u2014 evidence provenance stays in get_song_research_status. Available meaningfully once research has evidence.",
+    inputSchema: emptySchema,
+    annotations: READ_ONLY,
+    execute: async () => fetchSongBlueprint()
+  });
+  await register({
     name: "resolve_researched_song",
-    description: "Resolve the accumulated independent musical evidence into a provenance-rich SongGraph when confidence is sufficient. Do not call this if get_song_research_status still reports a high-priority evidence gap unless the user explicitly accepts a lower-confidence arrangement. On success the song becomes fully analyzable state: compile/practice tools work on it immediately.",
+    description: "Resolve the accumulated independent musical evidence (the Song Blueprint) into a provenance-rich SongGraph when confidence is sufficient. Operates ONLY on already-submitted evidence \u2014 it cannot invent musical structure. Do not call this if validate_song_blueprint or get_song_research_status still reports a high-priority gap unless the user explicitly accepts a lower-confidence arrangement. On success the song becomes fully analyzable state: compile/practice tools work on it immediately.",
     inputSchema: {
       type: "object",
       properties: {
@@ -20428,7 +20596,13 @@ async function initWebMcp() {
     await loadInitialState();
   } catch {
   }
-  if (!webMcpAvailable()) return "unavailable";
+  if (!webMcpAvailable()) {
+    try {
+      await registerWebMcpTools();
+    } catch {
+    }
+    return "unavailable";
+  }
   try {
     await registerWebMcpTools();
     return "connected";
@@ -20569,7 +20743,7 @@ var diagramSvg = (name, capo) => {
   return shape !== void 0 ? chordDiagramSvg(shape, { width: 86, height: 122 }) : `<div class="muted" style="width:86px">${name}</div>`;
 };
 function render() {
-  $("webmcpStatus").textContent = state.webmcp === "connected" ? `WebMCP Connected \xB7 ${TOOL_COUNT} tools` : state.webmcp === "error" ? "WebMCP registration failed" : "WebMCP unavailable in this browser";
+  $("webmcpStatus").textContent = state.webmcp === "connected" ? `AI Agent Connected \xB7 WebMCP \xB7 ${TOOL_COUNT} tools` : state.webmcp === "error" ? "WebMCP registration failed" : "AI Site Tools unavailable in this browser \u2014 you can still use the app manually, paste a song link, or enter structured musical information.";
   document.querySelectorAll(".levels button[data-level]").forEach((b) => {
     b.classList.toggle("active", b.dataset.level === state.level);
   });
@@ -20577,15 +20751,16 @@ function render() {
   $("songTitle").textContent = state.title.length > 0 ? state.title : state.songId;
   const a = state.analysis;
   const researchableSource = state.loadedSource !== null && state.loadedSource.capability === "RESEARCHABLE";
+  const researchActive = state.research !== null;
   $("analysis").innerHTML = a ? `<div class="facts">
         <div><span>${Math.round(a.tempoBpm)} BPM</span><label>Tempo</label></div>
         <div><span>${a.meter}</span><label>Meter</label></div>
         <div><span>${a.key ?? "\u2014"}</span><label>Key</label></div>
         <div><span>${Math.round(a.confidence * 100)}%</span><label>Confidence</label></div>
       </div>
-      <div class="chords">${a.harmony.mainChords.map((c) => `<span class="song-chord">${c}</span>`).join(" \xB7 ")}</div>` : researchableSource ? `<div class="notice">We found the song.<br />
-          This source doesn't expose analyzable audio, so your agent researches its musical structure from independent public sources.<br />
-          <span class="muted">Researching key, tempo, meter, harmony and sections\u2026</span></div>` : '<span class="muted">Not analyzed yet</span>';
+      <div class="chords">${a.harmony.mainChords.map((c) => `<span class="song-chord">${c}</span>`).join(" \xB7 ")}</div>` : researchActive ? '<span class="muted">Understanding the song from agent research\u2026</span>' : researchableSource ? `<div class="notice">We found the song.<br />
+            This source doesn't expose analyzable audio, so your agent researches its musical structure from independent public sources.<br />
+            <span class="muted">Researching key, tempo, meter, harmony and sections\u2026</span></div>` : '<span class="muted">Tell your AI agent what song you want to learn \u2014 or request one above. Example: \u201CTeach me Perfect by Ed Sheeran.\u201D</span>';
   const analyzable = a !== null;
   for (const id of ["compile", "analyze", "explain", "planAdd"]) {
     const btn = $(id);
@@ -20745,6 +20920,32 @@ function highlightChord(chord) {
   });
   $("nowChord").textContent = chord !== null && state.arrangement !== null ? `Now: ${chord}${state.arrangement.capo > 0 ? ` (capo ${state.arrangement.capo})` : ""}` : "";
 }
+function bindSongRequest() {
+  const request = async () => {
+    const query = $("songName").value.trim();
+    if (query.length === 0) {
+      $("requestStatus").textContent = 'Type a song name first \u2014 e.g. "Perfect by Ed Sheeran".';
+      return;
+    }
+    const btn = $("requestSong");
+    btn.disabled = true;
+    btn.textContent = "Requesting song\u2026";
+    $("requestStatus").textContent = "Establishing song identity and starting research\u2026";
+    try {
+      const result = await requestSong({ query });
+      $("requestStatus").textContent = result.reused ? `Research for \u201C${result.title}\u201D already exists \u2014 evidence kept.` : `\u201C${result.title}\u201D requested. Your agent can now research key, tempo, meter, harmony and form.`;
+    } catch (e) {
+      $("requestStatus").textContent = `Error: ${err(e)}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Learn This Song";
+    }
+  };
+  $("requestSong").addEventListener("click", () => void request());
+  $("songName").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") void request();
+  });
+}
 function bindLinkInput() {
   const load = async () => {
     const url2 = $("songUrl").value.trim();
@@ -20895,15 +21096,207 @@ function bindDebugOverlay() {
   if (new URLSearchParams(location.search).get("debug") !== "webmcp") return;
   const el = $("webmcpDebug");
   el.classList.remove("hidden");
-  const update = (line) => {
-    el.textContent = `WebMCP: ${state.webmcp} \xB7 tools registered: ${TOOL_COUNT}` + (line !== void 0 ? ` \xB7 last: ${line}` : "");
+  $("debugStatus").textContent = `WebMCP ${state.webmcp.toUpperCase()} \xB7 Registered tools: ${TOOL_COUNT}`;
+  const renderTable = () => {
+    $("debugTools").innerHTML = "<table><tr><th>tool</th><th>kind</th><th>last call</th></tr>" + [...toolSpecs.values()].map((spec) => {
+      const last = lastInvocationOf(spec.name);
+      const desc = spec.description.length > 110 ? `${spec.description.slice(0, 110)}\u2026` : spec.description;
+      return `<tr><td title="${spec.description.replace(/"/g, "&quot;")}"><strong>${spec.name}</strong><div class="muted">${desc}</div></td><td>${spec.readOnly ? "read-only" : "mutating"}</td><td>${last !== void 0 ? `${last.durationMs}ms<div class="muted">${last.result ?? ""}</div>` : '<span class="muted">\u2014</span>'}</td></tr>`;
+    }).join("") + "</table>";
   };
-  update();
-  onToolInvocation((invocation) => update(`${invocation.tool} \xB7 ${invocation.durationMs}ms`));
+  renderTable();
+  const select = $("debugToolSelect");
+  for (const name of [...toolRegistry.keys()].sort()) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    select.appendChild(option);
+  }
+  const presets = {
+    request_song: { title: "Perfect", artist: "Ed Sheeran" },
+    submit_song_evidence: {
+      sourceUrl: "https://chords.example/perfect",
+      sourceTitle: "Perfect chords",
+      sourceKind: "CHORD_RESOURCE",
+      claims: [
+        { claimType: "KEY", value: { key: "Ab major" } },
+        { claimType: "TEMPO", value: { bpm: 63 } },
+        { claimType: "CHORD_PROGRESSION", value: { chords: ["Ab", "Fm", "Db", "Eb"], section: "chorus" }, chordRepresentation: "SOUNDING_HARMONY" }
+      ]
+    },
+    set_player_profile: { knownChords: ["G", "C", "D", "Em", "Am"], barreChordsComfortable: false },
+    compile_guitar_version: { level: "BEGINNER", avoidBarreChords: true },
+    configure_practice_session: { loop: true, metronome: true, countInBars: 1, minutes: 20 }
+  };
+  $("debugPresets").innerHTML = Object.keys(presets).map(
+    (name) => `<button type="button" class="preset-chip" data-preset="${name}">${name}</button>`
+  ).join("");
+  $("debugPresets").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-preset]");
+    if (btn === null) return;
+    select.value = btn.dataset.preset;
+    $("debugInput").value = JSON.stringify(presets[btn.dataset.preset], null, 2);
+  });
+  $("debugInvoke").addEventListener("click", () => {
+    const name = select.value;
+    const execute = toolRegistry.get(name);
+    if (execute === void 0) {
+      $("debugResult").textContent = "unknown tool";
+      return;
+    }
+    let input2 = {};
+    try {
+      const raw = $("debugInput").value.trim();
+      input2 = raw.length > 0 ? JSON.parse(raw) : {};
+    } catch {
+      $("debugResult").textContent = "invalid JSON";
+      return;
+    }
+    $("debugResult").textContent = "invoking\u2026";
+    void execute(input2).then((result) => {
+      $("debugResult").textContent = "ok";
+      console.log(`[debug] ${name} \u2192`, result);
+      renderTable();
+    }).catch((e) => {
+      $("debugResult").textContent = `error: ${err(e)}`;
+      renderTable();
+    });
+  });
+  $("debugReplay").addEventListener("click", () => void runResearchReplay());
+  onToolInvocation(renderTable);
+}
+async function runResearchReplay() {
+  const invoke = async (name, input2) => {
+    const execute = toolRegistry.get(name);
+    if (execute === void 0) throw new Error(`tool not registered: ${name}`);
+    const result = await execute(input2);
+    renderReplayStep(`${name} ok`);
+    return result;
+  };
+  const renderReplayStep = (line) => {
+    $("replayStatus").textContent = line;
+  };
+  const call = (action, done) => action().then(() => {
+    logActivity(done);
+  });
+  try {
+    renderReplayStep("requesting song\u2026");
+    await call(
+      () => invoke("request_song", { title: "City Lights", artist: "The Analog Hearts" }),
+      "REPLAY \xB7 Song requested by name (no link)"
+    );
+    renderReplayStep("submitting identity sources\u2026");
+    await call(
+      () => invoke("submit_song_evidence", {
+        sourceUrl: "https://encyclopedia.example/city-lights",
+        sourceTitle: "City Lights \u2014 recording",
+        sourceKind: "MUSIC_DATABASE",
+        claims: [{ claimType: "IDENTITY", value: { title: "City Lights", artist: "The Analog Hearts" } }]
+      }),
+      "REPLAY \xB7 First identity source added"
+    );
+    await call(
+      () => invoke("submit_song_evidence", {
+        sourceUrl: "https://music-index.example/city-lights-single",
+        sourceTitle: "City Lights single page",
+        sourceKind: "MUSIC_DATABASE",
+        claims: [{ claimType: "IDENTITY", value: { title: "City Lights", artist: "The Analog Hearts", durationSeconds: 214 } }]
+      }),
+      "REPLAY \xB7 Second independent identity source added"
+    );
+    renderReplayStep("submitting harmony sources\u2026");
+    await call(
+      () => invoke("submit_song_evidence", {
+        sourceUrl: "https://chords-fan.example/city-lights",
+        sourceTitle: "City Lights chords (capo 1)",
+        sourceKind: "CHORD_RESOURCE",
+        claims: [
+          { claimType: "KEY", value: { key: "Ab major" } },
+          { claimType: "CHORD_PROGRESSION", value: { chords: ["G", "Em", "C", "D"], section: "chorus" }, chordRepresentation: "PLAYED_GUITAR_SHAPES", capo: 1 },
+          { claimType: "CAPO", value: { capo: 1 } }
+        ]
+      }),
+      "REPLAY \xB7 Harmony source A added (capo 1 played shapes)"
+    );
+    await call(
+      () => invoke("submit_song_evidence", {
+        sourceUrl: "https://theory-site.example/city-lights-harmony",
+        sourceTitle: "City Lights sounding harmony",
+        sourceKind: "MUSIC_ANALYSIS_RESOURCE",
+        claims: [
+          { claimType: "KEY", value: { key: "Ab major" } },
+          { claimType: "CHORD_PROGRESSION", value: { chords: ["Ab", "Fm", "Db", "Eb"], section: "chorus" }, chordRepresentation: "SOUNDING_HARMONY" }
+        ]
+      }),
+      "REPLAY \xB7 Harmony source B added \u2014 capo equivalence detected against source A"
+    );
+    renderReplayStep("submitting tempo evidence\u2026");
+    await call(
+      () => invoke("submit_song_evidence", {
+        sourceUrl: "https://song-blog.example/city-lights-review",
+        sourceTitle: "City Lights review",
+        sourceKind: "ARTICLE",
+        claims: [{ claimType: "TEMPO", value: { bpm: 63 } }]
+      }),
+      "REPLAY \xB7 Tempo source A: 63 BPM"
+    );
+    await call(
+      () => invoke("submit_song_evidence", {
+        sourceUrl: "https://fansite.example/city-lights-facts",
+        sourceTitle: "City Lights facts",
+        sourceKind: "MUSIC_DATABASE",
+        claims: [{ claimType: "TEMPO", value: { bpm: 126 } }]
+      }),
+      "REPLAY \xB7 Tempo source B: 126 BPM \u2014 metrical disagreement detected"
+    );
+    renderReplayStep("resolving tempo conflict\u2026");
+    await call(
+      () => invoke("submit_song_evidence", {
+        sourceUrl: "https://music-analysis.example/city-lights-analysis",
+        sourceTitle: "City Lights musical analysis",
+        sourceKind: "MUSIC_ANALYSIS_RESOURCE",
+        claims: [
+          { claimType: "TEMPO", value: { bpm: 63 } },
+          { claimType: "METER", value: { numerator: 6, denominator: 8 } },
+          { claimType: "FORM", value: { sections: ["intro", "verse", "chorus", "verse", "chorus", "bridge", "chorus"] } }
+        ]
+      }),
+      "REPLAY \xB7 Meter + form evidence added \u2014 tempo conflict resolved (126 = double-time pulse)"
+    );
+    renderReplayStep("validating + resolving blueprint\u2026");
+    await invoke("validate_song_blueprint", {});
+    await call(
+      () => invoke("resolve_researched_song", { allowWarnings: true }),
+      "REPLAY \xB7 Song Blueprint resolved into a SongGraph"
+    );
+    renderReplayStep("setting player profile\u2026");
+    await call(
+      () => invoke("set_player_profile", {
+        knownChords: ["G", "C", "D", "Em", "Am"],
+        barreChordsComfortable: false,
+        practicePreferences: { avoidBarreChords: true }
+      }),
+      "REPLAY \xB7 Player profile applied (beginner, no barre chords)"
+    );
+    renderReplayStep("compiling arrangement\u2026");
+    const compiled = await invoke("compile_guitar_version", { level: "BEGINNER", avoidBarreChords: true });
+    logActivity(
+      `REPLAY \xB7 Compiled beginner version (capo ${compiled.capo}, plays ${compiled.chords.join(" ")}, difficulty for you ${compiled.playerDifficulty.toFixed(1)})`
+    );
+    renderReplayStep("choosing section\u2026");
+    await call(() => invoke("choose_learning_section", { section: "CHORUS" }), "REPLAY \xB7 Chorus selected as the starting section");
+    renderReplayStep("configuring practice\u2026");
+    await call(() => invoke("configure_practice_session", { loop: true, metronome: true, countInBars: 1, minutes: 20 }), "REPLAY \xB7 20-minute practice session configured");
+    await call(() => invoke("prepare_practice_preview", {}), "REPLAY \xB7 Practice preview ready (the human presses Play)");
+    renderReplayStep("done \u2713");
+  } catch (e) {
+    renderReplayStep(`replay failed: ${err(e)}`);
+  }
 }
 async function main() {
   render();
   bindManualControls();
+  bindSongRequest();
   bindActivityFeed();
   bindLinkInput();
   bindDebugOverlay();

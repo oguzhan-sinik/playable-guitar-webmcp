@@ -79,6 +79,30 @@ const PRIORS: Record<EvidenceClaimType, Partial<Record<EvidenceSourceKind, numbe
     OFFICIAL_METADATA: 0.3,
     OTHER: 0.25,
   },
+  SECTION_STRUCTURE: {
+    MUSIC_ANALYSIS_RESOURCE: 0.7,
+    CHORD_RESOURCE: 0.5,
+    ARTICLE: 0.4,
+    MUSIC_DATABASE: 0.4,
+    OFFICIAL_METADATA: 0.4,
+    OTHER: 0.25,
+  },
+  FORM: {
+    MUSIC_ANALYSIS_RESOURCE: 0.7,
+    CHORD_RESOURCE: 0.5,
+    ARTICLE: 0.4,
+    MUSIC_DATABASE: 0.4,
+    OFFICIAL_METADATA: 0.4,
+    OTHER: 0.25,
+  },
+  SHORT_MOTIF: {
+    MUSIC_ANALYSIS_RESOURCE: 0.65,
+    ARTICLE: 0.4,
+    CHORD_RESOURCE: 0.4,
+    MUSIC_DATABASE: 0.3,
+    OFFICIAL_METADATA: 0.3,
+    OTHER: 0.25,
+  },
 };
 
 /**

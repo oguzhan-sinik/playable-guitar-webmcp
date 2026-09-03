@@ -29,6 +29,10 @@ import {
   compactResearchStatus,
   resolveResearchedSong,
   getCurrentResearchSession,
+  requestSong,
+  getResearchBrief,
+  getSongBlueprint,
+  validateSongBlueprint,
 } from '../application/research-song.js';
 import { searchLicensedTracks, loadLicensedTrack } from '../providers/licensed-audio/licensed-audio-provider.js';
 
@@ -109,6 +113,12 @@ function songIdOf(req: IncomingMessage, body: Record<string, unknown>): string {
   return new URL(req.url ?? '/', 'http://x').searchParams.get('songId') ?? DEFAULT_SONG;
 }
 
+/** Brief payload when a research session is active; empty marker otherwise. */
+function maybeBrief(): Record<string, unknown> {
+  if (getCurrentResearchSession() === null) return { brief: null };
+  return { brief: getResearchBrief() };
+}
+
 export function createDemoServer(): Server {
   return createServer(handler);
 }
@@ -170,6 +180,28 @@ const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void>
 
     // --- agent research (evidence fusion) ---
 
+    if (url === '/api/song/request' && req.method === 'POST') {
+      const body = await readBody(req);
+      const result = await requestSong(body);
+      json(res, 200, result);
+      return;
+    }
+
+    if (url === '/api/research/brief' && req.method === 'GET') {
+      json(res, 200, { active: getCurrentResearchSession() !== null, ...maybeBrief() });
+      return;
+    }
+
+    if (url === '/api/research/blueprint' && req.method === 'GET') {
+      json(res, 200, getSongBlueprint());
+      return;
+    }
+
+    if (url === '/api/research/blueprint/validate' && req.method === 'GET') {
+      json(res, 200, validateSongBlueprint());
+      return;
+    }
+
     if (url === '/api/research/begin' && req.method === 'POST') {
       const body = await readBody(req);
       const result = await beginSongResearch({
@@ -187,7 +219,7 @@ const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void>
     if (url === '/api/research/evidence' && req.method === 'POST') {
       const body = await readBody(req);
       const result = await submitSongEvidence(body);
-      json(res, 200, { added: result.added, ...compactResearchStatus(result.session, result.resolution) });
+      json(res, 200, { added: result.added, addedCount: result.addedCount, ...compactResearchStatus(result.session, result.resolution) });
       return;
     }
 

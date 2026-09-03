@@ -7,6 +7,7 @@ import { buildResearchSongGraph } from '../engines/research/research-graph.js';
 import { chordLabelForPc } from '../engines/research/evidence-normalizer.js';
 import { lookupMusicBrainzRecording, type MusicBrainzLookupResult } from '../providers/music-metadata/musicbrainz-provider.js';
 import { LocalSongGraphRepository } from '../repositories/song-graph-repository.js';
+import { createSongRequest, type SongRequest } from '../domain/song-request/song-request.js';
 import { config } from '../config/env.js';
 import { AppError } from '../errors/app-error.js';
 
@@ -132,13 +133,23 @@ export async function beginSongResearch(input: BeginResearchInput, deps: Researc
 export async function submitSongEvidence(
   payload: Record<string, unknown>,
   deps: ResearchDeps = {},
-): Promise<{ session: SongResearchSession; resolution: ResearchResolution; added: boolean }> {
+): Promise<{ session: SongResearchSession; resolution: ResearchResolution; added: boolean; addedCount: number }> {
   const session = requireCurrent();
-  const evidence = validateEvidence(payload);
-  const added = addEvidence(session, evidence);
+  let addedCount = 0;
+  if (Array.isArray(payload.claims)) {
+    // BATCH: several compact facts observed on ONE source → one call.
+    const { claims, ...source } = payload;
+    for (const claim of claims as Record<string, unknown>[]) {
+      const evidence = validateEvidence({ ...source, ...claim });
+      if (addEvidence(session, evidence)) addedCount += 1;
+    }
+  } else {
+    const evidence = validateEvidence(payload);
+    if (addEvidence(session, evidence)) addedCount = 1;
+  }
   const resolution = resolveSongResearch(session);
   await saveResearchSession(deps.dataDir ?? config.dataDir, session);
-  return { session, resolution, added };
+  return { session, resolution, added: addedCount > 0, addedCount };
 }
 
 export function getResearchStatus(): { session: SongResearchSession; resolution: ResearchResolution } {
@@ -203,6 +214,154 @@ function requireCurrent(): SongResearchSession {
   return current;
 }
 
+// --- song request by NAME (the no-link hero path) ---
+
+export interface RequestSongResult {
+  request: SongRequest;
+  reused: boolean;
+  brief: Record<string, unknown>;
+  musicBrainz?: { recordingId: string; title: string; artist: string; ambiguous: boolean } | null;
+}
+
+/**
+ * Establish song identity intent from a NAME (no link, no audio) and start/reuse
+ * the compatible research session. Reuses the persisted session for the same
+ * recording — resubmitting the same song never restarts research.
+ */
+export async function requestSong(
+  input: { query?: unknown; title?: unknown; artist?: unknown; version?: unknown },
+  deps: ResearchDeps = {},
+): Promise<RequestSongResult> {
+  const request = createSongRequest(input);
+  const before = current;
+  const began = await beginSongResearch(
+    {
+      title: request.identity.title,
+      artist: request.identity.artist,
+    },
+    deps,
+  );
+  // same recording requested twice → the persisted research session is reused
+  const reused = before !== null && before.id === began.session.id;
+  return {
+    request,
+    reused,
+    brief: researchBrief(began.session, began.resolution),
+    musicBrainz: began.musicBrainz ?? null,
+  };
+}
+
+// --- research brief + song blueprint (read-only projections) ---
+
+/**
+ * The agent-facing orchestration view: what is known, what is missing, and what
+ * to research next. Deterministic — derived only from stored evidence.
+ */
+export function researchBrief(session: SongResearchSession, resolution: ResearchResolution): Record<string, unknown> {
+  const compact = compactResearchStatus(session, resolution);
+  const gaps = [...(resolution.gaps ?? [])].sort((a, b) => {
+    const rank = (p: string): number => (p === 'HIGH' ? 0 : p === 'MEDIUM' ? 1 : 2);
+    return rank(a.priority) - rank(b.priority);
+  });
+  return {
+    song: {
+      title: session.songIdentity.title,
+      ...(session.songIdentity.artist.length > 0 && { artist: session.songIdentity.artist }),
+    },
+    status: resolution.status,
+    understanding: {
+      identity: resolution.confidence.identity,
+      harmony: resolution.confidence.harmony,
+      key: resolution.confidence.key,
+      tempo: resolution.confidence.tempo,
+      meter: resolution.confidence.meter,
+      structure: resolution.confidence.structure,
+      overall: resolution.confidence.overallUsability,
+    },
+    independentSources: compact.independentDomains,
+    sources: compact.sources,
+    conflicts: resolution.conflicts.map((c) => ({
+      field: c.field,
+      readings: c.hypotheses.map((h) => h.value),
+      suggestedQueries: c.suggestedResolutionQueries.slice(0, 4),
+    })),
+    priorityGaps: gaps.slice(0, 4),
+    suggestedQueries: gaps.flatMap((g) => g.suggestedQueries).slice(0, 8),
+    ...(resolution.warnings.length > 0 && { warnings: resolution.warnings }),
+    hypotheses: (session.hypotheses as Array<{ explanation?: string }>)
+      .map((h) => h.explanation ?? '')
+      .filter((s) => s.length > 0)
+      .slice(0, 4),
+  };
+}
+
+export function getResearchBrief(): Record<string, unknown> {
+  const session = requireCurrent();
+  const resolution = session.resolution ?? resolveSongResearch(session);
+  return researchBrief(session, resolution);
+}
+
+/**
+ * Compact research blueprint: the resolved musical facts without the evidence
+ * database. Timing stays SECTION_RELATIVE — research never invents recording
+ * timestamps.
+ */
+export function songBlueprint(session: SongResearchSession, resolution: ResearchResolution): Record<string, unknown> {
+  return {
+    identity: {
+      title: resolution.identity.title ?? session.songIdentity.title,
+      artist: resolution.identity.artist || session.songIdentity.artist,
+      ...(resolution.identity.musicBrainzRecordingId !== undefined && { musicBrainzRecordingId: resolution.identity.musicBrainzRecordingId }),
+      ...(resolution.identity.isrc !== undefined && { isrc: resolution.identity.isrc }),
+    },
+    ...(resolution.key !== undefined && { key: resolution.key.display }),
+    ...(resolution.tempo !== undefined && { tempo: { bpm: resolution.tempo.practiceOrMetricBpm, explanation: resolution.tempo.explanation } }),
+    ...(resolution.meter !== undefined && { meter: `${resolution.meter.numerator}/${resolution.meter.denominator}` }),
+    mainHarmony: resolution.harmony.mainChords,
+    sectionHarmony: resolution.harmony.sections.map((s) => ({
+      section: s.section,
+      chords: s.chords.map((c) => chordLabelForPc(c.rootPc, c.family, resolution.harmony.preferFlats)),
+      confidence: Math.round(s.confidence * 100) / 100,
+    })),
+    form: resolution.structure.sectionOrder,
+    timingPrecision: 'SECTION_RELATIVE',
+    status: resolution.status,
+    confidence: resolution.confidence,
+    warnings: resolution.warnings,
+    origin: 'WEB_RESEARCH',
+    resolverVersion: resolution.resolverVersion,
+    researchVersion: resolution.researchVersion,
+  };
+}
+
+export function getSongBlueprint(): Record<string, unknown> {
+  const session = requireCurrent();
+  const resolution = session.resolution ?? resolveSongResearch(session);
+  return songBlueprint(session, resolution);
+}
+
+/** Read-only readiness check with concrete issues — never mutates anything. */
+export function validateSongBlueprint(): Record<string, unknown> {
+  const session = requireCurrent();
+  const resolution = session.resolution ?? resolveSongResearch(session);
+  const issues: string[] = [...resolution.warnings];
+  if (resolution.identity.ambiguous === true) {
+    issues.push(`Identity ambiguous — candidates: ${(resolution.identity.candidateSummaries ?? []).join(', ')}`);
+  }
+  if (resolution.confidence.harmony < 0.6) issues.push('Harmony has weak or single-source support — resolve would be TENTATIVE.');
+  if (resolution.tempo === undefined) issues.push('No tempo evidence yet — practice would use a neutral default.');
+  if (resolution.meter === undefined) issues.push('No meter evidence yet — practice display assumes 4/4.');
+  if (resolution.status === 'READY') issues.push('No blocking issues — the blueprint resolves honestly.');
+  return {
+    status: resolution.status === 'RESEARCHING' || resolution.status === 'NEEDS_MORE_EVIDENCE' ? 'NOT_READY' : resolution.status,
+    canResolve: resolution.status === 'READY' || resolution.status === 'READY_WITH_WARNINGS',
+    issues,
+    confidence: resolution.confidence,
+    openConflicts: resolution.conflicts.map((c) => c.field),
+    gaps: resolution.gaps.slice(0, 4),
+  };
+}
+
 /** Retract a source entirely (e.g. it described an acoustic version). */
 export async function retractEvidenceByUrl(urlPrefix: string, deps: ResearchDeps = {}): Promise<{ removed: number }> {
   const session = requireCurrent();
@@ -233,6 +392,11 @@ export function compactResearchStatus(session: SongResearchSession, resolution: 
         return String(v.key);
       case 'SECTION':
         return String(v.name);
+      case 'FORM':
+      case 'SECTION_STRUCTURE':
+        return (v.sections as string[]).join(' · ');
+      case 'SHORT_MOTIF':
+        return `${(v.notes as unknown[]).length}-note motif`;
       case 'IDENTITY':
         return [v.artist, v.title].filter(Boolean).join(' — ');
       case 'DURATION':
