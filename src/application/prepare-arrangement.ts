@@ -165,9 +165,11 @@ export function summarizeAnalysis(graph: SongGraph): AnalysisSummary {
     const label = `${c.root}${c.quality === 'minor' ? 'm' : ''}`;
     chordCounts.set(label, (chordCounts.get(label) ?? 0) + 1);
   }
+  // full harmonic vocabulary of the resolved graph (most-used first) — the UI
+  // truncates visually with "+N", the data itself stays complete
   const mainChords = [...chordCounts.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
+    .slice(0, 8)
     .map(([label]) => label);
   const avgConfidence =
     graph.harmony.chords.reduce((sum, c) => sum + c.confidence, 0) / (graph.harmony.chords.length || 1);

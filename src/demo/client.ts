@@ -88,7 +88,13 @@ function render(): void {
         <div><span>${a.key ?? '—'}</span><label>Key</label></div>
         <div><span>${Math.round(a.confidence * 100)}%</span><label>Confidence</label></div>
       </div>
-      <div class="chords">${a.harmony.mainChords.map((c) => `<span class="song-chord">${c}</span>`).join(' · ')}</div>`
+      <div class="eyebrow" style="margin:.4rem 0 .1rem">Original harmony</div>
+      <div class="chords">${(() => {
+        const chords = a.harmony.mainChords;
+        const shown = chords.slice(0, 6);
+        const extra = chords.length - shown.length;
+        return shown.map((c) => `<span class="song-chord">${c}</span>`).join(' · ') + (extra > 0 ? ` <span class="muted">+${extra}</span>` : '');
+      })()}</div>`
     : researchActive
       ? '<span class="muted">Understanding the song from agent research…</span>'
       : researchableSource
@@ -130,10 +136,10 @@ function render(): void {
       r.playerDifficulty !== undefined && r.difficultyBefore > 0
         ? pct(r.difficultyBefore, r.playerDifficulty)
         : pct(r.difficultyBefore, r.difficultyAfter);
-    $('easierPill').textContent = reduction > 0 ? `${reduction}% easier` : 'easiest found';
+    $('easierPill').textContent = reduction > 0 ? `${reduction}% easier for you` : 'easiest found';
     $('statOriginal').textContent = r.difficultyBefore.toFixed(2);
     $('statPlayer').textContent =
-      r.playerDifficulty !== undefined ? `${r.playerDifficulty.toFixed(2)} · ${Math.round(r.tempoBpm)} BPM` : r.difficultyAfter.toFixed(2);
+      r.playerDifficulty !== undefined ? `${r.playerDifficulty.toFixed(2)} · ${Math.round(r.tempoBpm)} BPM practice` : r.difficultyAfter.toFixed(2);
     $('statFidelity').textContent = `${Math.round(r.fidelity * 100)}%`;
     $('statBarre').textContent = r.barreChordCount > 0 ? String(r.barreChordCount) : '0';
     // hero chord diagrams: the played shape + the sounding harmony it produces
@@ -145,8 +151,9 @@ function render(): void {
           <div class="hc-name">${c}</div>
           ${diagramSvg(c, r.capo, 132, 168)}
           <div class="hc-map">
-            <div class="hc-you">YOU PLAY <b>${c}</b></div>
-            ${sounding !== undefined ? `<div class="hc-arrow">↓</div><div class="hc-song">SONG HEARS <b>${sounding}</b></div>` : ''}
+            ${sounding !== undefined && sounding !== c
+              ? `<div class="hc-you">YOU PLAY <b>${c}</b></div><div class="hc-arrow">↓</div><div class="hc-song">SONG HEARS <b>${sounding}</b></div>`
+              : `<div class="hc-you">ORIGINAL · <b>${c}</b></div>`}
           </div>
         </div>`;
       })
@@ -258,15 +265,22 @@ function renderResearch(): void {
 
   const overall = Math.round((c?.overallUsability ?? 0) * 100);
   const ready = r.status === 'READY' || r.status === 'READY_WITH_WARNINGS';
+  // per-field independent source families — real provenance, shown per row
+  const fs = r.fieldSources ?? {};
+  const src = (f: string): string => (fs[f] ?? 0) > 0 ? `${fs[f]} source${fs[f]! > 1 ? 's' : ''}` : '';
+  const structureNote = r.structureStatus === 'APPROXIMATE' ? 'approximate' : '';
+  const harmonyChords = res?.mainChords ?? [];
+  const harmonyShown = harmonyChords.slice(0, 6);
+  const harmonyExtra = harmonyChords.length - harmonyShown.length;
   $('researchBoard').innerHTML = `
-    <div class="res-row"><div class="res-head"><strong>IDENTITY</strong><span class="ok">${cls(c?.identity ?? 0) === 'miss' ? 'identifying…' : `${Math.round((c?.identity ?? 0) * 100)}%`}</span></div>
+    <div class="res-row"><div class="res-head"><strong>IDENTITY</strong><span class="ok">${cls(c?.identity ?? 0) === 'miss' ? 'identifying…' : `${Math.round((c?.identity ?? 0) * 100)}%${src('identity') !== '' ? ` · ${src('identity')}` : ''}`}</span></div>
       <div class="res-value">${identityValue || '—'}</div>
       ${identityNote !== '' ? `<div class="src-chip">${identityNote} ✓</div>` : ''}</div>
-    ${row('KEY', res?.key ?? '—', c?.key ?? 0)}
-    ${row('TEMPO', res?.tempoBpm !== undefined ? `${res.tempoBpm} BPM` : '—', c?.tempo ?? 0, res?.tempoExplanation !== undefined ? 'metrical levels merged' : '')}
-    ${row('METER', res?.meter ?? '—', c?.meter ?? 0)}
-    ${row('HARMONY', (res?.mainChords ?? []).length > 0 ? res!.mainChords.join(' · ') : '—', c?.harmony ?? 0, (r.independentDomains ?? 0) > 1 ? `${r.independentDomains} independent sources` : '')}
-    ${row('STRUCTURE', (res?.sectionOrder ?? []).length > 0 ? res!.sectionOrder.join(' · ') : '—', c?.structure ?? 0)}
+    ${row('KEY', res?.key ?? '—', c?.key ?? 0, src('key'))}
+    ${row('TEMPO', res?.tempoBpm !== undefined ? `${res.tempoBpm} BPM` : '—', c?.tempo ?? 0, [res?.tempoExplanation !== undefined ? 'metrical levels merged' : '', src('tempo')].filter(Boolean).join(' · '))}
+    ${row('METER', res?.meter ?? '—', c?.meter ?? 0, src('meter'))}
+    ${row('HARMONY', harmonyChords.length > 0 ? harmonyShown.join(' · ') + (harmonyExtra > 0 ? ` <span class="muted">+${harmonyExtra}</span>` : '') : '—', c?.harmony ?? 0, src('harmony'))}
+    ${row('STRUCTURE', (res?.sectionOrder ?? []).length > 0 ? res!.sectionOrder.join(' · ') : '—', c?.structure ?? 0, [src('structure'), structureNote].filter(Boolean).join(' · '))}
     ${conflictBoxes}
     <div class="res-row"><div class="res-head"><span>Sources checked</span><span>${r.sources ?? 0} · ${r.independentDomains ?? 0} independent</span></div>
       <div>${sources.map((s) => `<a class="src-chip" href="${s.url}" target="_blank" rel="noreferrer">${s.domain}</a>`).join('')}</div></div>

@@ -19879,6 +19879,8 @@ async function requestSong(input2) {
     ...brief.status !== void 0 && { status: brief.status },
     ...brief.sources !== void 0 && { sources: brief.sources },
     ...brief.independentSources !== void 0 && { independentDomains: brief.independentSources },
+    ...brief.fieldSources !== void 0 && { fieldSources: brief.fieldSources },
+    ...brief.structureStatus !== void 0 && { structureStatus: brief.structureStatus },
     ...brief.understanding !== void 0 && {
       confidence: brief.understanding
     },
@@ -20303,6 +20305,7 @@ async function registerWebMcpTools() {
         },
         tradeoffs: compiled.changes.slice(0, 5),
         ladder: compiled.ladder.map((l) => ({ level: l.level, capo: l.capo, difficulty: l.difficulty, playerDifficulty: l.playerDifficulty, fidelity: l.fidelity })),
+        reporting: "When summarizing for the user, report ONLY facts returned by Playable tools (blueprint, arrangement, diagnostics, practice session). Do not invent bar-by-bar structure, strumming patterns, fingerpicking instructions, or extra chord progressions.",
         nextSuggestedTools: [
           { name: "get_arrangement_diagnostics", reason: "Check whether this version still contains difficult elements for this player.", priority: "MEDIUM" },
           { name: "choose_learning_section", reason: "Select the most recognizable section for the player to start with.", priority: "MEDIUM" },
@@ -20345,7 +20348,8 @@ async function registerWebMcpTools() {
           }
         ] : [
           { name: "choose_learning_section", reason: "Difficulty looks comfortable \u2014 pick the best section to start with.", priority: "MEDIUM" }
-        ]
+        ],
+        reporting: 'Explain "why easier" using THIS diagnostics data and the compiled arrangement tradeoffs only. Do not add teaching content (strumming patterns, bar-by-bar breakdowns, theory claims) that Playable did not return.'
       };
     }
   });
@@ -20450,6 +20454,7 @@ async function registerWebMcpTools() {
         sessionSteps: session.steps.map((s) => ({ instruction: s.instruction, minutes: s.minutes })),
         totalMinutes: session.steps.reduce((sum, s) => sum + s.minutes, 0),
         defaultApplied: practice.defaultApplied === true,
+        reporting: "Summarize the practice setup from these fields only (section, tempo factor, metronome, count-in, minutes). The practice tempo is a session setting \u2014 the song's original BPM is unchanged.",
         nextSuggestedTools: [
           { name: "prepare_practice_preview", reason: "Render the synthesized preview of exactly this arrangement \u2014 then tell the human to press Play.", priority: "HIGH" }
         ]
@@ -20912,7 +20917,13 @@ function render() {
         <div><span>${a.key ?? "\u2014"}</span><label>Key</label></div>
         <div><span>${Math.round(a.confidence * 100)}%</span><label>Confidence</label></div>
       </div>
-      <div class="chords">${a.harmony.mainChords.map((c) => `<span class="song-chord">${c}</span>`).join(" \xB7 ")}</div>` : researchActive ? '<span class="muted">Understanding the song from agent research\u2026</span>' : researchableSource ? `<div class="notice">We found the song.<br />
+      <div class="eyebrow" style="margin:.4rem 0 .1rem">Original harmony</div>
+      <div class="chords">${(() => {
+    const chords = a.harmony.mainChords;
+    const shown = chords.slice(0, 6);
+    const extra = chords.length - shown.length;
+    return shown.map((c) => `<span class="song-chord">${c}</span>`).join(" \xB7 ") + (extra > 0 ? ` <span class="muted">+${extra}</span>` : "");
+  })()}</div>` : researchActive ? '<span class="muted">Understanding the song from agent research\u2026</span>' : researchableSource ? `<div class="notice">We found the song.<br />
             This source doesn't expose analyzable audio, so your agent researches its musical structure from independent public sources.<br />
             <span class="muted">Researching key, tempo, meter, harmony and sections\u2026</span></div>` : '<span class="muted">Tell your AI agent what song you want to learn \u2014 or request one above. Example: \u201CTeach me Perfect by Ed Sheeran.\u201D</span>';
   const analyzable = a !== null;
@@ -20938,9 +20949,9 @@ function render() {
     $("levelLabel").textContent = `YOUR PLAYABLE VERSION \xB7 ${r.level}`;
     $("capo").textContent = r.capo > 0 ? `CAPO ${r.capo}` : "NO CAPO";
     const reduction = r.playerDifficulty !== void 0 && r.difficultyBefore > 0 ? pct(r.difficultyBefore, r.playerDifficulty) : pct(r.difficultyBefore, r.difficultyAfter);
-    $("easierPill").textContent = reduction > 0 ? `${reduction}% easier` : "easiest found";
+    $("easierPill").textContent = reduction > 0 ? `${reduction}% easier for you` : "easiest found";
     $("statOriginal").textContent = r.difficultyBefore.toFixed(2);
-    $("statPlayer").textContent = r.playerDifficulty !== void 0 ? `${r.playerDifficulty.toFixed(2)} \xB7 ${Math.round(r.tempoBpm)} BPM` : r.difficultyAfter.toFixed(2);
+    $("statPlayer").textContent = r.playerDifficulty !== void 0 ? `${r.playerDifficulty.toFixed(2)} \xB7 ${Math.round(r.tempoBpm)} BPM practice` : r.difficultyAfter.toFixed(2);
     $("statFidelity").textContent = `${Math.round(r.fidelity * 100)}%`;
     $("statBarre").textContent = r.barreChordCount > 0 ? String(r.barreChordCount) : "0";
     const soundingFor = (played) => r.mapping.find((m) => m.played === played)?.sounding;
@@ -20950,8 +20961,7 @@ function render() {
           <div class="hc-name">${c}</div>
           ${diagramSvg(c, r.capo, 132, 168)}
           <div class="hc-map">
-            <div class="hc-you">YOU PLAY <b>${c}</b></div>
-            ${sounding !== void 0 ? `<div class="hc-arrow">\u2193</div><div class="hc-song">SONG HEARS <b>${sounding}</b></div>` : ""}
+            ${sounding !== void 0 && sounding !== c ? `<div class="hc-you">YOU PLAY <b>${c}</b></div><div class="hc-arrow">\u2193</div><div class="hc-song">SONG HEARS <b>${sounding}</b></div>` : `<div class="hc-you">ORIGINAL \xB7 <b>${c}</b></div>`}
           </div>
         </div>`;
     }).join("");
@@ -21028,15 +21038,21 @@ function renderResearch() {
   const sources = (r.evidence ?? []).filter((ev) => ev.url.startsWith("http")).map((ev) => ({ domain: ev.domain, url: ev.url })).filter((s, i, arr) => arr.findIndex((x) => x.domain === s.domain) === i);
   const overall = Math.round((c?.overallUsability ?? 0) * 100);
   const ready = r.status === "READY" || r.status === "READY_WITH_WARNINGS";
+  const fs = r.fieldSources ?? {};
+  const src = (f) => (fs[f] ?? 0) > 0 ? `${fs[f]} source${fs[f] > 1 ? "s" : ""}` : "";
+  const structureNote = r.structureStatus === "APPROXIMATE" ? "approximate" : "";
+  const harmonyChords = res?.mainChords ?? [];
+  const harmonyShown = harmonyChords.slice(0, 6);
+  const harmonyExtra = harmonyChords.length - harmonyShown.length;
   $("researchBoard").innerHTML = `
-    <div class="res-row"><div class="res-head"><strong>IDENTITY</strong><span class="ok">${cls(c?.identity ?? 0) === "miss" ? "identifying\u2026" : `${Math.round((c?.identity ?? 0) * 100)}%`}</span></div>
+    <div class="res-row"><div class="res-head"><strong>IDENTITY</strong><span class="ok">${cls(c?.identity ?? 0) === "miss" ? "identifying\u2026" : `${Math.round((c?.identity ?? 0) * 100)}%${src("identity") !== "" ? ` \xB7 ${src("identity")}` : ""}`}</span></div>
       <div class="res-value">${identityValue || "\u2014"}</div>
       ${identityNote !== "" ? `<div class="src-chip">${identityNote} \u2713</div>` : ""}</div>
-    ${row("KEY", res?.key ?? "\u2014", c?.key ?? 0)}
-    ${row("TEMPO", res?.tempoBpm !== void 0 ? `${res.tempoBpm} BPM` : "\u2014", c?.tempo ?? 0, res?.tempoExplanation !== void 0 ? "metrical levels merged" : "")}
-    ${row("METER", res?.meter ?? "\u2014", c?.meter ?? 0)}
-    ${row("HARMONY", (res?.mainChords ?? []).length > 0 ? res.mainChords.join(" \xB7 ") : "\u2014", c?.harmony ?? 0, (r.independentDomains ?? 0) > 1 ? `${r.independentDomains} independent sources` : "")}
-    ${row("STRUCTURE", (res?.sectionOrder ?? []).length > 0 ? res.sectionOrder.join(" \xB7 ") : "\u2014", c?.structure ?? 0)}
+    ${row("KEY", res?.key ?? "\u2014", c?.key ?? 0, src("key"))}
+    ${row("TEMPO", res?.tempoBpm !== void 0 ? `${res.tempoBpm} BPM` : "\u2014", c?.tempo ?? 0, [res?.tempoExplanation !== void 0 ? "metrical levels merged" : "", src("tempo")].filter(Boolean).join(" \xB7 "))}
+    ${row("METER", res?.meter ?? "\u2014", c?.meter ?? 0, src("meter"))}
+    ${row("HARMONY", harmonyChords.length > 0 ? harmonyShown.join(" \xB7 ") + (harmonyExtra > 0 ? ` <span class="muted">+${harmonyExtra}</span>` : "") : "\u2014", c?.harmony ?? 0, src("harmony"))}
+    ${row("STRUCTURE", (res?.sectionOrder ?? []).length > 0 ? res.sectionOrder.join(" \xB7 ") : "\u2014", c?.structure ?? 0, [src("structure"), structureNote].filter(Boolean).join(" \xB7 "))}
     ${conflictBoxes}
     <div class="res-row"><div class="res-head"><span>Sources checked</span><span>${r.sources ?? 0} \xB7 ${r.independentDomains ?? 0} independent</span></div>
       <div>${sources.map((s) => `<a class="src-chip" href="${s.url}" target="_blank" rel="noreferrer">${s.domain}</a>`).join("")}</div></div>

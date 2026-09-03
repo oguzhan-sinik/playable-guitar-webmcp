@@ -310,6 +310,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         }),
         tradeoffs: compiled.changes.slice(0, 5),
         ladder: compiled.ladder.map((l) => ({ level: l.level, capo: l.capo, difficulty: l.difficulty, playerDifficulty: l.playerDifficulty, fidelity: l.fidelity })),
+        reporting: 'When summarizing for the user, report ONLY facts returned by Playable tools (blueprint, arrangement, diagnostics, practice session). Do not invent bar-by-bar structure, strumming patterns, fingerpicking instructions, or extra chord progressions.',
         nextSuggestedTools: [
           { name: 'get_arrangement_diagnostics', reason: 'Check whether this version still contains difficult elements for this player.', priority: 'MEDIUM' },
           { name: 'choose_learning_section', reason: 'Select the most recognizable section for the player to start with.', priority: 'MEDIUM' },
@@ -363,6 +364,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
           : [
               { name: 'choose_learning_section', reason: 'Difficulty looks comfortable — pick the best section to start with.', priority: 'MEDIUM' as const },
             ],
+        reporting: 'Explain "why easier" using THIS diagnostics data and the compiled arrangement tradeoffs only. Do not add teaching content (strumming patterns, bar-by-bar breakdowns, theory claims) that Playable did not return.',
       };
     },
   });
@@ -482,6 +484,7 @@ export async function registerWebMcpTools(): Promise<WebMcpRegistration | null> 
         sessionSteps: session.steps.map((s) => ({ instruction: s.instruction, minutes: s.minutes })),
         totalMinutes: session.steps.reduce((sum, s) => sum + s.minutes, 0),
         defaultApplied: practice.defaultApplied === true,
+        reporting: 'Summarize the practice setup from these fields only (section, tempo factor, metronome, count-in, minutes). The practice tempo is a session setting — the song\'s original BPM is unchanged.',
         nextSuggestedTools: [
           { name: 'prepare_practice_preview', reason: 'Render the synthesized preview of exactly this arrangement — then tell the human to press Play.', priority: 'HIGH' },
         ],

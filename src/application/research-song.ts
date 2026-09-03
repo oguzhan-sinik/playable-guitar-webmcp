@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { domainFamilyOf } from '../domain/song-research/evidence-source.js';
 import { loadResearchSession, saveResearchSession, createResearchSession, addEvidence, type SongResearchSession, type SongResearchIdentity } from '../domain/song-research/research-session.js';
 import { validateEvidence, type MusicalEvidence } from '../domain/song-research/musical-evidence.js';
 import type { ResearchResolution } from '../domain/song-research/research-resolution.js';
@@ -287,6 +288,30 @@ const FIELD_INSTRUCTIONS: Record<string, string> = {
   identity: 'Confirm the exact recording (artist + title + version) from a music database.',
 };
 
+const FIELD_CLAIMS: Record<string, string[]> = {
+  identity: ['IDENTITY'],
+  key: ['KEY'],
+  tempo: ['TEMPO'],
+  meter: ['METER'],
+  harmony: ['CHORD_SET', 'CHORD_PROGRESSION'],
+  structure: ['SECTION', 'FORM', 'SECTION_STRUCTURE'],
+};
+
+/** Distinct independent source families behind one field. */
+function fieldSourceCount(session: SongResearchSession, field: string): number {
+  const claimTypes = FIELD_CLAIMS[field] ?? [];
+  const families = new Set(
+    session.evidence.filter((ev) => claimTypes.includes(ev.claimType)).map((ev) => domainFamilyOf(ev.source.url)),
+  );
+  return families.size;
+}
+
+/** Structure is only VERIFIED when a source actually stated it — never when
+ * merely inferred from harmony sections. */
+function structureStatusOf(session: SongResearchSession, resolution: ResearchResolution): 'VERIFIED' | 'APPROXIMATE' {
+  return fieldSourceCount(session, 'structure') > 0 && resolution.confidence.structure >= 0.6 ? 'VERIFIED' : 'APPROXIMATE';
+}
+
 export function researchBrief(session: SongResearchSession, resolution: ResearchResolution): Record<string, unknown> {
   const compact = compactResearchStatus(session, resolution);
   const gaps = [...(resolution.gaps ?? [])].sort((a, b) => {
@@ -294,6 +319,7 @@ export function researchBrief(session: SongResearchSession, resolution: Research
     return rank(a.priority) - rank(b.priority);
   });
   const ready = resolution.status === 'READY' || resolution.status === 'READY_WITH_WARNINGS';
+  const c = resolution.confidence;
   return {
     song: {
       title: session.songIdentity.title,
@@ -302,14 +328,29 @@ export function researchBrief(session: SongResearchSession, resolution: Research
     status: resolution.status,
     readyToCompile: ready,
     understanding: {
-      identity: resolution.confidence.identity,
-      harmony: resolution.confidence.harmony,
-      key: resolution.confidence.key,
-      tempo: resolution.confidence.tempo,
-      meter: resolution.confidence.meter,
-      structure: resolution.confidence.structure,
-      overall: resolution.confidence.overallUsability,
+      identity: c.identity,
+      harmony: c.harmony,
+      key: c.key,
+      tempo: c.tempo,
+      meter: c.meter,
+      structure: c.structure,
+      overall: c.overallUsability,
     },
+    // per-field independent source families — real provenance, not vibes
+    fieldSources: Object.fromEntries(Object.keys(FIELD_CLAIMS).map((f) => [f, fieldSourceCount(session, f)])),
+    // overall is a weighted usability score, not an average — expose the math
+    confidenceBreakdown: {
+      weights: { identity: 0.2, harmony: 0.45, key: 0.1, tempo: 0.1, meter: 0.075, structure: 0.075 },
+      contributions: {
+        identity: Math.round(0.2 * c.identity * 1000) / 1000,
+        harmony: Math.round(0.45 * c.harmony * 1000) / 1000,
+        key: Math.round(0.1 * c.key * 1000) / 1000,
+        tempo: Math.round(0.1 * c.tempo * 1000) / 1000,
+        meter: Math.round(0.075 * c.meter * 1000) / 1000,
+        structure: Math.round(0.075 * c.structure * 1000) / 1000,
+      },
+    },
+    structureStatus: structureStatusOf(session, resolution),
     independentSources: compact.independentDomains,
     sources: compact.sources,
     // the work queue: what to search for next, with exact queries
@@ -452,6 +493,9 @@ export function compactResearchStatus(session: SongResearchSession, resolution: 
       artist: session.songIdentity.artist || resolution.identity.artist,
       ambiguous: resolution.identity.ambiguous === true,
     },
+    // independent families per field (provenance the UI can show per row)
+    fieldSources: Object.fromEntries(Object.keys(FIELD_CLAIMS).map((f) => [f, fieldSourceCount(session, f)])),
+    structureStatus: structureStatusOf(session, resolution),
     resolved: {
       key: resolution.key?.display,
       tempoBpm: resolution.tempo?.practiceOrMetricBpm,

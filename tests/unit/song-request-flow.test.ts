@@ -253,3 +253,69 @@ describe('no-link research projections', () => {
     expect(warnings.some((w) => w.includes('reuse the strongest resolved progression'))).toBe(true);
   });
 });
+
+describe('correctness + provenance audit', () => {
+  it('the resolved harmonic vocabulary is never silently truncated to four chords', () => {
+    const s = session();
+    for (const [i, chords] of [
+      ['G', 'C', 'Em', 'D', 'Am'],
+      ['G', 'C', 'Em', 'D', 'Am'],
+    ].entries()) {
+      submit(s, {
+        claimType: 'CHORD_PROGRESSION',
+        sourceUrl: `https://src${i}.example/chords`,
+        sourceKind: 'CHORD_RESOURCE',
+        value: { chords, section: 'verse' },
+      });
+    }
+    const resolution = resolveSongResearch(s);
+    expect(resolution.harmony.mainChords).toEqual(expect.arrayContaining(['G', 'C', 'Em', 'D', 'Am']));
+  });
+
+  it('per-field source counts use independent source families, and low structure confidence is APPROXIMATE', async () => {
+    const dataDir = path.join(await mkdtemp(path.join(tmpdir(), 'req-')), 'data');
+    await requestSong(
+      { title: 'Audit Song', artist: 'The Auditors' },
+      { dataDir, fetchFn: (async (): Promise<Response> => { throw new Error('offline'); }) as typeof fetch },
+    );
+    // harmony: two pages from the SAME domain = one family, plus one more
+    await submitSongEvidence(
+      {
+        sourceUrl: 'https://chords.example/a',
+        sourceKind: 'CHORD_RESOURCE',
+        claims: [
+          { claimType: 'CHORD_PROGRESSION', value: { chords: ['G', 'C', 'Em', 'D'], section: 'chorus' } },
+          { claimType: 'KEY', value: { key: 'G major' } },
+        ],
+      },
+      { dataDir },
+    );
+    await submitSongEvidence(
+      {
+        sourceUrl: 'https://chords.example/b',
+        sourceKind: 'CHORD_RESOURCE',
+        claims: [{ claimType: 'CHORD_PROGRESSION', value: { chords: ['G', 'C', 'Em', 'D'], section: 'chorus' } }],
+      },
+      { dataDir },
+    );
+    await submitSongEvidence(
+      {
+        sourceUrl: 'https://other.example/a',
+        sourceKind: 'MUSIC_DATABASE',
+        claims: [{ claimType: 'CHORD_PROGRESSION', value: { chords: ['G', 'C', 'Em', 'D'], section: 'chorus' } }],
+      },
+      { dataDir },
+    );
+    const brief = getResearchBrief() as {
+      fieldSources: Record<string, number>;
+      structureStatus: string;
+      understanding: { structure: number };
+      confidenceBreakdown: { weights: Record<string, number> };
+    };
+    expect(brief.fieldSources.harmony).toBe(2); // chords.example + other.example
+    expect(brief.fieldSources.key).toBe(1);
+    expect(brief.fieldSources.structure).toBe(0);
+    expect(brief.structureStatus).toBe('APPROXIMATE'); // no structure evidence at all
+    expect(brief.confidenceBreakdown.weights.harmony).toBeCloseTo(0.45);
+  });
+});

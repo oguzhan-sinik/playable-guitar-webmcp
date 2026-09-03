@@ -573,5 +573,8 @@ describe('NO-LINK HERO FLOW (request by name → research → resolve → compil
     const preview = (await toolFor('prepare_practice_preview').execute({})) as { ready: boolean; playedByHuman: boolean };
     expect(preview.ready).toBe(true);
     expect(preview.playedByHuman).toBe(true); // no autoplay — the human presses Play
+    // practice session state must never rewrite the SONG's original tempo
+    expect(state.analysis?.tempoBpm).toBeGreaterThan(0);
+    expect(state.practice.tempoFactor).toBeLessThanOrEqual(1);
   });
 });

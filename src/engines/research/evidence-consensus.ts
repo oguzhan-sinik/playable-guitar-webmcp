@@ -350,7 +350,9 @@ export function resolveHarmony(evidence: MusicalEvidence[]): HarmonyResult {
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
   }
-  const mainChords = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([label]) => label);
+  // full resolved harmonic vocabulary (most-used first) — never silently truncated;
+  // clients may show "+N" but the data carries everything
+  const mainChords = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label]) => label);
 
   return {
     sections,

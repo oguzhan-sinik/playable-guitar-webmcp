@@ -134,6 +134,8 @@ export interface ResearchStatus {
   };
   sources?: number;
   independentDomains?: number;
+  fieldSources?: Record<string, number>;
+  structureStatus?: string;
   confidence?: {
     identity: number;
     key: number;
@@ -656,6 +658,8 @@ export async function requestSong(input: {
     understanding?: Record<string, number> | undefined;
     independentSources?: number | undefined;
     sources?: number | undefined;
+    fieldSources?: Record<string, number> | undefined;
+    structureStatus?: string | undefined;
     conflicts?: Array<{ field: string; readings: unknown[] }> | undefined;
     priorityGaps?: Array<{ field: string; reason: string; priority: string; suggestedQueries: string[] }> | undefined;
     suggestedQueries?: string[] | undefined;
@@ -669,6 +673,8 @@ export async function requestSong(input: {
     ...(brief.status !== undefined && { status: brief.status }),
     ...(brief.sources !== undefined && { sources: brief.sources }),
     ...(brief.independentSources !== undefined && { independentDomains: brief.independentSources }),
+    ...(brief.fieldSources !== undefined && { fieldSources: brief.fieldSources }),
+    ...(brief.structureStatus !== undefined && { structureStatus: brief.structureStatus }),
     ...(brief.understanding !== undefined && {
       confidence: brief.understanding as NonNullable<ResearchStatus['confidence']>,
     }),
