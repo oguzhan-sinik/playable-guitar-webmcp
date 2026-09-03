@@ -50,12 +50,24 @@ const diagramSvg = (name: string, capo: number): string => {
 };
 
 function render(): void {
-  $('webmcpStatus').textContent =
+  const statusPill = $('webmcpStatus');
+  statusPill.textContent =
     state.webmcp === 'connected'
-      ? `AI Agent Connected · WebMCP · ${TOOL_COUNT} tools`
+      ? `AI Agent Connected · ${TOOL_COUNT} tools`
       : state.webmcp === 'error'
         ? 'WebMCP registration failed'
-        : 'AI Site Tools unavailable in this browser — you can still use the app manually, paste a song link, or enter structured musical information.';
+        : 'AI tools unavailable — manual mode works';
+  statusPill.classList.toggle('on', state.webmcp === 'connected');
+
+  // Now Learning subtitle tracks the product moment
+  $('learnSub').textContent =
+    state.research !== null
+      ? 'Your AI agent is researching this song and adapting it for your level.'
+      : state.arrangement !== null
+        ? 'Your version is ready — press Play in Practice.'
+        : state.songId.length > 0
+          ? 'A song is loaded — ask your agent to compile your version, or type a different song below.'
+          : 'Tell your AI agent what song you want to learn — or type one below.';
 
   document.querySelectorAll<HTMLButtonElement>('.levels button[data-level]').forEach((b) => {
     b.classList.toggle('active', b.dataset.level === state.level);
@@ -102,6 +114,7 @@ function render(): void {
     .join('');
 
   const r = state.arrangement;
+  $('resultEmpty').classList.toggle('hidden', r !== null);
   $('versionCard').classList.toggle('hidden', r === null);
   $('ladderCard').classList.toggle('hidden', r === null);
   $('mappingCard').classList.toggle('hidden', r === null || r.mapping.length === 0);
@@ -141,6 +154,11 @@ function render(): void {
 
     renderStudio();
   }
+
+  // practice area placeholder: visible until section chips or the studio exist
+  const practiceActive = state.sections.length > 0 || r !== null;
+  $('practiceEmpty').classList.toggle('hidden', practiceActive);
+  $('sectionCard').classList.toggle('hidden', state.sections.length === 0);
 
   const why = state.explanation;
   $('whyCard').classList.toggle('hidden', why === null);
@@ -494,18 +512,57 @@ let activityCount = 0;
 function bindActivityFeed(): void {
   onActivity((message) => {
     $('agentFeed').classList.remove('hidden');
+    $('feedEmpty').classList.add('hidden');
     const item = document.createElement('div');
-    item.className = 'feed-item';
+    const warn = /conflict|error|fail|ambiguous|not fully met/i.test(message);
+    item.className = warn ? 'feed-item warn' : 'feed-item';
     item.textContent = message;
     $('agentFeed').prepend(item);
     activityCount += 1;
-    if (activityCount > 5) $('agentFeed').lastElementChild?.remove();
+    if (activityCount > 12) $('agentFeed').lastElementChild?.remove();
   });
 }
 
-/** Hidden dev overlay: ?debug=webmcp */
-function bindDebugOverlay(): void {
-  if (new URLSearchParams(location.search).get('debug') !== 'webmcp') return;
+/** Corner-button drawers: Details / Manual / Debug. Debug also via ?debug=webmcp. */
+function bindDrawers(): void {
+  const backdrop = $('backdrop');
+  const open = (id: string): void => {
+    $(id).classList.add('open');
+    backdrop.classList.add('show');
+  };
+  const closeAll = (): void => {
+    document.querySelectorAll('.drawer.open').forEach((d) => d.classList.remove('open'));
+    backdrop.classList.remove('show');
+  };
+  $('openManual').addEventListener('click', () => open('manualDrawer'));
+  $('openDetails').addEventListener('click', () => {
+    if ($('planCard').classList.contains('hidden') && $('sessionCard').classList.contains('hidden') && $('ladderCard').classList.contains('hidden')) {
+      $('detailsEmpty').classList.remove('hidden');
+    } else {
+      $('detailsEmpty').classList.add('hidden');
+    }
+    open('detailsDrawer');
+  });
+  $('openDebug').addEventListener('click', () => {
+    bindDebugPanel();
+    open('debugDrawer');
+  });
+  backdrop.addEventListener('click', closeAll);
+  document.querySelectorAll<HTMLButtonElement>('[data-close]').forEach((b) => {
+    b.addEventListener('click', closeAll);
+  });
+  if (new URLSearchParams(location.search).get('debug') === 'webmcp') {
+    bindDebugPanel();
+    open('debugDrawer');
+  }
+}
+
+/** Dev panel: tool table + manual invoker + replay (built once, hidden by default). */
+let debugPanelBound = false;
+let renderDebugTable: () => void = () => {};
+function bindDebugPanel(): void {
+  if (debugPanelBound) return;
+  debugPanelBound = true;
   const el = $('webmcpDebug');
   el.classList.remove('hidden');
   $('debugStatus').textContent = `WebMCP ${state.webmcp.toUpperCase()} · Registered tools: ${TOOL_COUNT}`;
@@ -526,6 +583,7 @@ function bindDebugOverlay(): void {
       '</table>';
   };
   renderTable();
+  renderDebugTable = renderTable;
 
   // manual invoker — calls the SAME executors the browser agent reaches
   const select = $('debugToolSelect') as HTMLSelectElement;
@@ -760,11 +818,14 @@ async function main(): Promise<void> {
   bindSongRequest();
   bindActivityFeed();
   bindLinkInput();
-  bindDebugOverlay();
+  bindDrawers();
   onStateChange(render);
   onCurrentChord(highlightChord);
   state.webmcp = await initWebMcp();
   render();
+  renderDebugTable();
+  // dev convenience: ?replay=1 runs the synthetic research fixture on load
+  if (new URLSearchParams(location.search).get('replay') === '1') void runResearchReplay();
   // headless-test hook: drive the shared actions the WebMCP tools use
   (window as unknown as { __playableDebug: unknown }).__playableDebug = {
     state,

@@ -20743,7 +20743,10 @@ var diagramSvg = (name, capo) => {
   return shape !== void 0 ? chordDiagramSvg(shape, { width: 86, height: 122 }) : `<div class="muted" style="width:86px">${name}</div>`;
 };
 function render() {
-  $("webmcpStatus").textContent = state.webmcp === "connected" ? `AI Agent Connected \xB7 WebMCP \xB7 ${TOOL_COUNT} tools` : state.webmcp === "error" ? "WebMCP registration failed" : "AI Site Tools unavailable in this browser \u2014 you can still use the app manually, paste a song link, or enter structured musical information.";
+  const statusPill = $("webmcpStatus");
+  statusPill.textContent = state.webmcp === "connected" ? `AI Agent Connected \xB7 ${TOOL_COUNT} tools` : state.webmcp === "error" ? "WebMCP registration failed" : "AI tools unavailable \u2014 manual mode works";
+  statusPill.classList.toggle("on", state.webmcp === "connected");
+  $("learnSub").textContent = state.research !== null ? "Your AI agent is researching this song and adapting it for your level." : state.arrangement !== null ? "Your version is ready \u2014 press Play in Practice." : state.songId.length > 0 ? "A song is loaded \u2014 ask your agent to compile your version, or type a different song below." : "Tell your AI agent what song you want to learn \u2014 or type one below.";
   document.querySelectorAll(".levels button[data-level]").forEach((b) => {
     b.classList.toggle("active", b.dataset.level === state.level);
   });
@@ -20774,6 +20777,7 @@ function render() {
       </button>`;
   }).join("");
   const r = state.arrangement;
+  $("resultEmpty").classList.toggle("hidden", r !== null);
   $("versionCard").classList.toggle("hidden", r === null);
   $("ladderCard").classList.toggle("hidden", r === null);
   $("mappingCard").classList.toggle("hidden", r === null || r.mapping.length === 0);
@@ -20799,6 +20803,9 @@ function render() {
     $("mapping").innerHTML = r.mapping.map((m) => `<div><span class="played">${m.played}</span> <span class="arrow">\u2192</span> ${m.sounding}</div>`).join("") + (r.capo > 0 ? `<div class="muted">Capo ${r.capo}</div>` : "");
     renderStudio();
   }
+  const practiceActive = state.sections.length > 0 || r !== null;
+  $("practiceEmpty").classList.toggle("hidden", practiceActive);
+  $("sectionCard").classList.toggle("hidden", state.sections.length === 0);
   const why = state.explanation;
   $("whyCard").classList.toggle("hidden", why === null);
   if (why !== null) {
@@ -21084,16 +21091,54 @@ var activityCount = 0;
 function bindActivityFeed() {
   onActivity((message) => {
     $("agentFeed").classList.remove("hidden");
+    $("feedEmpty").classList.add("hidden");
     const item = document.createElement("div");
-    item.className = "feed-item";
+    const warn = /conflict|error|fail|ambiguous|not fully met/i.test(message);
+    item.className = warn ? "feed-item warn" : "feed-item";
     item.textContent = message;
     $("agentFeed").prepend(item);
     activityCount += 1;
-    if (activityCount > 5) $("agentFeed").lastElementChild?.remove();
+    if (activityCount > 12) $("agentFeed").lastElementChild?.remove();
   });
 }
-function bindDebugOverlay() {
-  if (new URLSearchParams(location.search).get("debug") !== "webmcp") return;
+function bindDrawers() {
+  const backdrop = $("backdrop");
+  const open2 = (id) => {
+    $(id).classList.add("open");
+    backdrop.classList.add("show");
+  };
+  const closeAll = () => {
+    document.querySelectorAll(".drawer.open").forEach((d) => d.classList.remove("open"));
+    backdrop.classList.remove("show");
+  };
+  $("openManual").addEventListener("click", () => open2("manualDrawer"));
+  $("openDetails").addEventListener("click", () => {
+    if ($("planCard").classList.contains("hidden") && $("sessionCard").classList.contains("hidden") && $("ladderCard").classList.contains("hidden")) {
+      $("detailsEmpty").classList.remove("hidden");
+    } else {
+      $("detailsEmpty").classList.add("hidden");
+    }
+    open2("detailsDrawer");
+  });
+  $("openDebug").addEventListener("click", () => {
+    bindDebugPanel();
+    open2("debugDrawer");
+  });
+  backdrop.addEventListener("click", closeAll);
+  document.querySelectorAll("[data-close]").forEach((b) => {
+    b.addEventListener("click", closeAll);
+  });
+  if (new URLSearchParams(location.search).get("debug") === "webmcp") {
+    bindDebugPanel();
+    open2("debugDrawer");
+  }
+}
+var debugPanelBound = false;
+var renderDebugTable = () => {
+};
+function bindDebugPanel() {
+  if (debugPanelBound) return;
+  debugPanelBound = true;
   const el = $("webmcpDebug");
   el.classList.remove("hidden");
   $("debugStatus").textContent = `WebMCP ${state.webmcp.toUpperCase()} \xB7 Registered tools: ${TOOL_COUNT}`;
@@ -21105,6 +21150,7 @@ function bindDebugOverlay() {
     }).join("") + "</table>";
   };
   renderTable();
+  renderDebugTable = renderTable;
   const select = $("debugToolSelect");
   for (const name of [...toolRegistry.keys()].sort()) {
     const option = document.createElement("option");
@@ -21299,11 +21345,13 @@ async function main() {
   bindSongRequest();
   bindActivityFeed();
   bindLinkInput();
-  bindDebugOverlay();
+  bindDrawers();
   onStateChange(render);
   onCurrentChord(highlightChord);
   state.webmcp = await initWebMcp();
   render();
+  renderDebugTable();
+  if (new URLSearchParams(location.search).get("replay") === "1") void runResearchReplay();
   window.__playableDebug = {
     state,
     loadSongLink,
